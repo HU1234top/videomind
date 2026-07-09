@@ -1,12 +1,24 @@
+# Dependencies
 node_modules/
+
+# Browser profiles & cookies
 edge_profile/
 cookies*.json
 doubao_cookies*.json
 session_info.json
+
+# Logs
 *.log
+
+# Environment
 .env
+.env.*
+
+# OS files
 .DS_Store
 Thumbs.db
+
+# Intermediate data (generated during runs)
 batch_results*.json
 step_*.json
 video_pilot_*.json
@@ -30,3 +42,11 @@ skill_folder_info.json
 lexiang_import_payload.json
 lexiang_page_meta.json
 lexiang_final_meta.json
+
+# Build output
+dist/
+coverage/
+
+# IDE
+.vscode/
+.idea/
