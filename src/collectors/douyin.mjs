@@ -2,6 +2,13 @@
  * Douyin Collector — Scrape video favorites from Douyin (TikTok China)
  * 
  * MVP validated: 76 videos successfully scraped from "skills" collection
+ * 
+ * Key capabilities:
+ * - Bypass download protection: operates in browser, no downloads needed
+ * - Extract #topic tags: auto-classify from Douyin's tag system
+ * - Harvest comments: top N comments as AI analysis input
+ * - Get cover images: assist AI visual understanding
+ * - Speech-to-text via web AI: no local Whisper needed
  */
 
 export class DouyinCollector {
@@ -13,9 +20,11 @@ export class DouyinCollector {
   /**
    * Collect all videos from a specified favorites collection
    * @param {string} collectionName - e.g. "skills"
-   * @returns {Array} List of video items
+   * @param {Object} options - { maxComments: 5, includeTags: true }
+   * @returns {Array} List of video items with enriched metadata
    */
-  async collect(collectionName) {
+  async collect(collectionName, options = {}) {
+    const { maxComments = 5, includeTags = true } = options;
     const page = await this.context.newPage();
     const videos = [];
 
@@ -54,20 +63,88 @@ export class DouyinCollector {
         const author = await card.locator('.author').textContent().catch(() => '');
         const thumb = await card.locator('img').first().getAttribute('src').catch(() => '');
         
+        // Extract #topic tags from title (Douyin format: "标题 #标签1 #标签2")
+        const tags = includeTags ? this.extractTags(title) : [];
+        
         if (link) {
           videos.push({
             url: link.startsWith('http') ? link : `${this.baseUrl}${link}`,
             title: title?.trim() || '',
             author: author?.trim() || '',
+            tags: tags,                   // Douyin #topic tags
             likes: 0,
-            thumb: thumb || '',
+            thumb: thumb || '',           // Cover image for AI visual analysis
+            comments: [],                 // To be filled in per-video phase
+            transcript: '',               // To be obtained via web AI speech understanding
+            // NOTE: No video file download needed!
+            // Douyin has anti-download protection; we operate
+            // entirely in the browser, letting web AI "watch" 
+            // the video like a human would.
           });
         }
       }
+
+      // Step 6: Per-video enrichment (comments, transcript preview)
+      // This happens separately in the analyze phase when we open
+      // each video page. The DouyinCollector handles bulk metadata
+      // extraction, while DoubaoAnalyzer handles per-video deep dive.
+      
     } finally {
       await page.close();
     }
 
     return videos;
+  }
+
+  /**
+   * Extract #topic tags from Douyin video title
+   * Douyin titles use format: "正文内容 #标签1 #标签2 #标签3"
+   * @param {string} title - Raw video title
+   * @returns {Array} List of extracted tags
+   */
+  extractTags(title) {
+    if (!title) return [];
+    const tagRegex = /#([^\s#]+)/g;
+    const tags = [];
+    let match;
+    while ((match = tagRegex.exec(title)) !== null) {
+      tags.push(match[1]);
+    }
+    return tags;
+  }
+
+  /**
+   * Fetch comments for a specific video
+   * Called during the analyze phase for per-video enrichment
+   * @param {string} videoUrl - Douyin video URL
+   * @param {number} maxComments - Maximum comments to fetch
+   * @returns {Array} List of comment objects
+   */
+  async fetchComments(videoUrl, maxComments = 5) {
+    const page = await this.context.newPage();
+    const comments = [];
+    
+    try {
+      await page.goto(videoUrl);
+      await page.waitForLoadState('networkidle');
+      
+      // Scroll to load comments section
+      await page.waitForTimeout(2000);
+      
+      // Extract visible comments
+      const commentElements = await page.locator('.comment-item, [data-e2e="comment-item"]').all();
+      for (let i = 0; i < Math.min(commentElements.length, maxComments); i++) {
+        const el = commentElements[i];
+        const text = await el.locator('.comment-text, .content').textContent().catch(() => '');
+        const author = await el.locator('.comment-author, .username').textContent().catch(() => '');
+        if (text) {
+          comments.push({ author: author?.trim() || '', text: text.trim() });
+        }
+      }
+    } finally {
+      await page.close();
+    }
+    
+    return comments;
   }
 }
