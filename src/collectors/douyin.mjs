@@ -11,10 +11,13 @@
  * - Speech-to-text via web AI: no local Whisper needed
  */
 
+import { getLimiter } from '../core/rate-limiter.mjs';
+
 export class DouyinCollector {
   constructor(context) {
     this.context = context;
     this.baseUrl = 'https://www.douyin.com';
+    this.limiter = getLimiter('douyin');
   }
 
   /**
@@ -104,11 +107,17 @@ export class DouyinCollector {
    */
   extractTags(title) {
     if (!title) return [];
+    // Match #tag pattern, but exclude pure numbers (#123赞 → skip #123)
     const tagRegex = /#([^\s#]+)/g;
     const tags = [];
     let match;
     while ((match = tagRegex.exec(title)) !== null) {
-      tags.push(match[1]);
+      const tag = match[1];
+      // Filter: skip tags that start with digits (like #123赞, #456浏览)
+      if (/^\d/.test(tag)) continue;
+      // Skip very short tags (single char noise)
+      if (tag.length <= 1) continue;
+      tags.push(tag);
     }
     return tags;
   }
@@ -121,16 +130,20 @@ export class DouyinCollector {
    * @returns {Array} List of comment objects
    */
   async fetchComments(videoUrl, maxComments = 5) {
+    // Adaptive pre-request delay
+    await this.limiter.delay();
+
     const page = await this.context.newPage();
     const comments = [];
-    
+    const t0 = Date.now();
+
     try {
       await page.goto(videoUrl);
       await page.waitForLoadState('networkidle');
-      
+
       // Scroll to load comments section
       await page.waitForTimeout(2000);
-      
+
       // Extract visible comments
       const commentElements = await page.locator('.comment-item, [data-e2e="comment-item"]').all();
       for (let i = 0; i < Math.min(commentElements.length, maxComments); i++) {
@@ -141,10 +154,15 @@ export class DouyinCollector {
           comments.push({ author: author?.trim() || '', text: text.trim() });
         }
       }
+
+      this.limiter.recordSuccess(Date.now() - t0);
+    } catch (e) {
+      this.limiter.recordError();
+      throw e;
     } finally {
       await page.close();
     }
-    
+
     return comments;
   }
 }

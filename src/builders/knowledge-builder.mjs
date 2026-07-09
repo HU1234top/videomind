@@ -64,8 +64,86 @@ export class KnowledgeBuilder {
   }
 
   removeSimilarTitles(videos) {
-    // Placeholder — full implementation would use embedding similarity
-    return videos;
+    if (videos.length <= 1) return videos;
+
+    const SIMILARITY_THRESHOLD = 0.6;
+    const kept = [];
+    const mergedRefs = new Map(); // title → [urls merged into it]
+
+    for (const video of videos) {
+      const title = (video.title || '').trim();
+      let bestMatch = null;
+      let bestScore = 0;
+
+      for (const existing of kept) {
+        const score = this.titleSimilarity(title, existing.title);
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = existing;
+        }
+      }
+
+      if (bestScore >= SIMILARITY_THRESHOLD && bestMatch) {
+        // Merge: keep the one with more content, add the other as reference
+        const refs = mergedRefs.get(bestMatch.title) || [];
+        refs.push(video.url);
+        mergedRefs.set(bestMatch.title, refs);
+        // If the duplicate has more analysis content, swap
+        if ((video.analysis || '').length > (bestMatch.analysis || '').length) {
+          const idx = kept.indexOf(bestMatch);
+          kept[idx] = video;
+          mergedRefs.set(video.title, refs);
+        }
+      } else {
+        kept.push(video);
+      }
+    }
+
+    // Attach merged references to kept videos
+    for (const video of kept) {
+      video.mergedUrls = mergedRefs.get(video.title) || [];
+    }
+
+    return kept;
+  }
+
+  /**
+   * Levenshtein-based title similarity (0.0 — completely different, 1.0 — identical)
+   */
+  titleSimilarity(a, b) {
+    if (!a || !b) return 0;
+    const la = a.length, lb = b.length;
+    if (la === 0) return lb === 0 ? 1 : 0;
+    if (lb === 0) return 0;
+
+    // Truncate very long titles for performance
+    const maxLen = 100;
+    const sa = a.slice(0, maxLen).toLowerCase();
+    const sb = b.slice(0, maxLen).toLowerCase();
+
+    const dist = this.levenshteinDist(sa, sb);
+    return 1 - dist / Math.max(sa.length, sb.length);
+  }
+
+  /**
+   * Standard Levenshtein distance (Wagner-Fischer algorithm)
+   */
+  levenshteinDist(a, b) {
+    const m = a.length, n = b.length;
+    const dp = Array.from({ length: m + 1 }, (_, i) => [i]);
+    dp[0] = Array.from({ length: n + 1 }, (_, j) => j);
+
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        dp[i][j] = Math.min(
+          dp[i - 1][j] + 1,      // deletion
+          dp[i][j - 1] + 1,      // insertion
+          dp[i - 1][j - 1] + cost // substitution
+        );
+      }
+    }
+    return dp[m][n];
   }
 
   getDistribution(categorized) {

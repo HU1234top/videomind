@@ -1,9 +1,14 @@
 /**
  * VideoMind Core — Web Agent abstraction layer
- * 
+ *
  * Connects to user's local Chrome via CDP, wraps web AI platforms
  * as callable SubAgents.
+ *
+ * IMPORTANT: disconnect() uses browser.disconnect() (not close()),
+ * because we connect to the user's real browser — close() would kill it.
  */
+
+import { DoubaoAnalyzer } from '../analyzers/doubao.mjs';
 
 export class WebAgent {
   constructor(options = {}) {
@@ -13,21 +18,29 @@ export class WebAgent {
   }
 
   async connect() {
-    // Connect to existing Chrome instance via CDP
     const { chromium } = await import('playwright-core');
     this.browser = await chromium.connectOverCDP(`http://localhost:${this.cdpPort}`);
     this.context = this.browser.contexts()[0] || await this.browser.newContext();
     return this;
   }
 
-  async sendToAI(platform, content, attachments = []) {
+  /**
+   * Send content to a web AI platform for analysis.
+   * @param {string} platform - Analyzer name (doubao, kimi, etc.)
+   * @param {Object} video - Video metadata object (title, author, comments, transcript, tags)
+   * @param {Object} options - Additional options (attachments, retryCount, etc.)
+   * @returns {Object} Structured analysis result
+   */
+  async sendToAI(platform, video, options = {}) {
     const analyzer = AnalyzerFactory.create(platform, this.context);
-    return analyzer.analyze(content, attachments);
+    return analyzer.analyze(video, options);
   }
 
   async disconnect() {
     if (this.browser) {
-      await this.browser.close();
+      // Use disconnect() not close() — we connected to user's
+      // real browser via CDP, close() would kill their Chrome!
+      await this.browser.disconnect();
     }
   }
 }
@@ -35,47 +48,16 @@ export class WebAgent {
 export class AnalyzerFactory {
   static create(platform, context) {
     switch (platform) {
-      case 'doubao': return new DoubaoAnalyzer(context);
-      case 'kimi': return new KimiAnalyzer(context);
-      case 'gemini': return new GeminiAnalyzer(context);
-      case 'claude': return new ClaudeAnalyzer(context);
-      default: throw new Error(`Unknown analyzer: ${platform}`);
+      case 'doubao':
+        return new DoubaoAnalyzer(context);
+      case 'kimi':
+        throw new Error('Kimi analyzer not yet implemented — see Phase 2 roadmap');
+      case 'gemini':
+        throw new Error('Gemini analyzer not yet implemented — see Phase 2 roadmap');
+      case 'claude':
+        throw new Error('Claude analyzer not yet implemented — see Phase 2 roadmap');
+      default:
+        throw new Error(`Unknown analyzer: ${platform}`);
     }
   }
-}
-
-export class DoubaoAnalyzer {
-  constructor(context) {
-    this.context = context;
-    this.url = 'https://doubao.com';
-  }
-
-  async analyze(content, attachments) {
-    const page = await this.context.newPage();
-    try {
-      await page.goto(this.url);
-      // Navigate to chat, input prompt, wait for response
-      // Extract structured output
-      // Implementation follows the validated MVP pattern
-      return { platform: 'doubao', analysis: '...' };
-    } finally {
-      await page.close();
-    }
-  }
-}
-
-// Placeholder analyzers — to be implemented in Phase 2
-export class KimiAnalyzer {
-  constructor(context) { this.context = context; this.url = 'https://kimi.ai'; }
-  async analyze() { throw new Error('Kimi analyzer not yet implemented'); }
-}
-
-export class GeminiAnalyzer {
-  constructor(context) { this.context = context; this.url = 'https://gemini.google.com'; }
-  async analyze() { throw new Error('Gemini analyzer not yet implemented'); }
-}
-
-export class ClaudeAnalyzer {
-  constructor(context) { this.context = context; this.url = 'https://claude.ai'; }
-  async analyze() { throw new Error('Claude analyzer not yet implemented'); }
 }

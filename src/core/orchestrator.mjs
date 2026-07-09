@@ -1,16 +1,23 @@
 /**
  * VideoMind Orchestrator — Task planning, routing, and coordination
+ *
+ * Key fix: unified analyzer.analyze(video, options) signature.
+ * Previous version had mismatched args (content vs video) between
+ * Orchestrator → WebAgent → DoubaoAnalyzer, causing semantic confusion
+ * and lost attachments.
  */
 
-import { WebAgent, AnalyzerFactory } from '../core/web-agent.mjs';
-import { SUPPORTED_ANALYZERS } from '../core/schema.mjs';
+import { WebAgent, AnalyzerFactory } from './web-agent.mjs';
+import { SUPPORTED_ANALYZERS } from './schema.mjs';
 
 export class Orchestrator {
   constructor(options = {}) {
     this.agent = new WebAgent({ cdpPort: options.cdpPort || 9222 });
-    this.mode = options.mode || 'sequential';  // 'sequential' or 'parallel'
+    this.mode = options.mode || 'sequential';
     this.primaryAnalyzer = options.primaryAnalyzer || 'doubao';
-    this.fallbackChain = options.fallbackChain || ['doubao', 'kimi', 'gemini', 'claude'];
+    // Only include actually-implemented analyzers in fallback chain
+    this.fallbackChain = options.fallbackChain || ['doubao'];
+    this.maxRetries = options.maxRetries || 3;
   }
 
   async init() {
@@ -19,59 +26,89 @@ export class Orchestrator {
   }
 
   /**
-   * Decide analysis strategy for a batch of videos
-   * - Sequential: one primary AI + fallback chain (fast, efficient)
-   * - Parallel: 3+ AI analyze simultaneously + consensus arbitration (accurate)
+   * Decide analysis strategy for a batch of videos.
+   *
+   * Fixed logic: sequential is the safe default for large batches,
+   * parallel only for small/high-priority batches with multiple
+   * *implemented* analyzers available.
    */
   decideStrategy(videos, options = {}) {
     const count = videos.length;
     const priority = options.priority || 'normal';
+    const implementedAnalyzers = ['doubao']; // Only actually working analyzers
 
-    if (priority === 'high' || count <= 10) {
-      return { mode: 'parallel', analyzers: this.fallbackChain.slice(0, 3) };
+    if (priority === 'high' && count <= 10 && implementedAnalyzers.length >= 2) {
+      return { mode: 'parallel', analyzers: implementedAnalyzers.slice(0, 2) };
     }
     return { mode: 'sequential', primary: this.primaryAnalyzer, fallback: this.fallbackChain };
   }
 
   /**
-   * Sequential mode: primary AI does deep analysis, fallback on failure
+   * Sequential mode: primary analyzer with retry + fallback.
+   * Only falls back to actually-implemented analyzers.
    */
   async analyzeSequential(video, primaryAnalyzer, fallbackChain) {
-    for (const analyzer of fallbackChain) {
-      try {
-        const result = await this.agent.sendToAI(analyzer, video);
-        if (result && result.analysis) return result;
-      } catch (e) {
-        console.log(`[VideoMind] ${analyzer} failed for ${video.title}, trying next...`);
-        continue;
+    const chain = fallbackChain || this.fallbackChain;
+    for (const analyzerName of chain) {
+      let lastError;
+      for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+        try {
+          const result = await this.agent.sendToAI(analyzerName, video, {
+            attempt,
+            maxRetries: this.maxRetries,
+          });
+          if (result && result.analysis) return result;
+        } catch (e) {
+          lastError = e;
+          console.log(`[VideoMind] ${analyzerName} attempt ${attempt} failed for "${video.title?.substring(0, 30)}": ${e.message}`);
+          if (attempt < this.maxRetries) {
+            // Exponential backoff: 2s, 4s, 8s
+            const delay = Math.pow(2, attempt) * 1000;
+            await new Promise(r => setTimeout(r, delay));
+          }
+        }
       }
+      console.log(`[VideoMind] ${analyzerName} exhausted retries, trying next analyzer...`);
     }
     throw new Error(`All analyzers failed for video: ${video.title}`);
   }
 
   /**
-   * Parallel mode: multiple AI analyze simultaneously, consensus arbitration
+   * Parallel mode: multiple analyzers run simultaneously.
+   * Currently only Doubao is implemented, so this effectively
+   * runs as single-analyzer until Phase 2 adds Kimi/Gemini/Claude.
    */
   async analyzeParallel(video, analyzers) {
+    const implemented = analyzers.filter(a => a === 'doubao');
+    if (implemented.length === 0) {
+      throw new Error('No implemented analyzers available for parallel mode');
+    }
+
     const results = await Promise.allSettled(
-      analyzers.map(a => this.agent.sendToAI(a, video))
+      implemented.map(a => this.agent.sendToAI(a, video))
     );
-    
+
     const successful = results
       .filter(r => r.status === 'fulfilled' && r.value?.analysis)
       .map(r => r.value);
 
-    if (successful.length === 0) throw new Error(`All parallel analyzers failed`);
+    if (successful.length === 0) throw new Error('All parallel analyzers failed');
     if (successful.length === 1) return successful[0];
 
-    // Consensus arbitration: merge/vote on best result
     return this.arbitrate(successful);
   }
 
+  /**
+   * Arbitration: pick the best result from multiple analyzers.
+   *
+   * Current: prefer Doubao for Chinese content (it's the only
+   * implemented analyzer anyway). Phase 2 will add:
+   * - LLM-as-Judge quality scoring
+   * - Weighted voting by dimension confidence
+   * - Cross-validation between analyzers
+   */
   arbitrate(results) {
-    // Simple arbitration: prefer Doubao for Chinese content
-    // Full implementation would use LLM-as-Judge or weighted voting
-    const doubaoResult = results.find(r => r.platform === 'doubao');
+    const doubaoResult = results.find(r => r.analyzer === 'doubao');
     return doubaoResult || results[0];
   }
 

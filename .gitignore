@@ -18,7 +18,9 @@ session_info.json
 .DS_Store
 Thumbs.db
 
-# Intermediate data (generated during runs)
+# Rate limiter state
+.videomind-rate-*.json
+
 batch_results*.json
 step_*.json
 video_pilot_*.json

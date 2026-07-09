@@ -189,14 +189,16 @@ node src/cli.mjs sync --sink markdown
 
 ## 🔌 支持矩阵
 
+> 实际实现状态详见 [docs/STATUS.md](docs/STATUS.md) — README 只列概览，STATUS.md 才是真相。
+
 ### 视频平台（Collector）
 
 | 平台 | 特色能力 | 状态 |
 |------|---------|------|
-| 🇨🇳 抖音 | 防下载绕过 + 标签提取 + 评论抓取 | ✅ MVP 已验证（76视频） |
-| 🇨🇳 B站 | 弹幕抓取 + 分P视频 + UP主信息 | 📋 Phase 2 |
-| 🌍 YouTube | CC字幕 + 长视频分段 + Chapters | 📋 Phase 2 |
-| 🇨🇳 小红书 | 图文笔记 + 标签分类 | 🔮 未来 |
+| 🇨🇳 抖音 | 防下载绕过 + 标签提取 + 评论抓取 | ✅ 已验证（76视频） |
+| 🇨🇳 B站 | 弹幕抓取 + 分P视频 + UP主信息 | ❌ 未实现（Phase 2） |
+| 🌍 YouTube | CC字幕 + 长视频分段 + Chapters | ❌ 未实现（Phase 2） |
+| 🇨🇳 小红书 | 图文笔记 + 标签分类 | ❌ 未实现 |
 
 > 各平台 Collector 接口统一（`collect(collectionName)`），新增平台只需实现一个 Adapter。
 
@@ -204,19 +206,21 @@ node src/cli.mjs sync --sink markdown
 
 | AI | 擅长 | 成本 | 限制 | 状态 |
 |----|------|------|------|------|
-| 豆包 | 中文理解、视觉分析、技能框架输出 | 免费 | 无限流 | ✅ 已验证 |
-| Kimi | 长文本、超长上下文 | 免费 | 无限流 | 📋 Phase 2 |
-| Gemini | 多模态推理、英文 | 免费 | 限流 | 📋 Phase 2 |
-| Claude | 结构化输出、代码逻辑 | 免费额度 | 限流 | 📋 Phase 2 |
+| 豆包 | 中文理解、视觉分析、技能框架输出 | 免费 | 无限流 | ✅ 已验证（10维度解析 + 重试 + CAPTCHA检测） |
+| Kimi | 长文本、超长上下文 | 免费 | 无限流 | ❌ throw "not yet implemented" |
+| Gemini | 多模态推理、英文 | 免费 | 限流 | ❌ throw "not yet implemented" |
+| Claude | 结构化输出、代码逻辑 | 免费额度 | 限流 | ❌ throw "not yet implemented" |
+
+> ⚠️ 目前只有豆包 Analyzer 可用。fallback chain 中 kimi/gemini/claude 会直接报错。
 
 ### 知识库（Sink）
 
-| 知识库 | 状态 |
-|--------|------|
-| 乐享知识库 | ✅ 已入库 6 篇 |
-| 本地 Markdown | ✅ 已实现 |
-| Obsidian | ✅ 基础版 |
-| Notion | 📋 Phase 3 |
+| 知识库 | 状态 | 备注 |
+|--------|------|------|
+| 乐享知识库 | ⚠️ 部分 | 实际是通过 WorkBuddy MCP 连接器入库，不在本 repo 代码内 |
+| 本地 Markdown | ✅ 已实现 | 含 YAML frontmatter + Obsidian wikilinks |
+| Obsidian | ⚠️ 部分 | Markdown 输出兼容 Obsidian 格式，但无 .obsidian 配置 |
+| Notion | ❌ 未实现（Phase 3） | |
 
 ## 🗺️ Roadmap
 
