@@ -1,0 +1,40 @@
+{
+  "name": "videomind",
+  "version": "0.2.0",
+  "description": "VideoMind — Turn your video favorites into a living knowledge base, zero API cost.",
+  "main": "src/index.mjs",
+  "type": "module",
+  "scripts": {
+    "collect": "node src/cli.mjs collect",
+    "analyze": "node src/cli.mjs analyze",
+    "build": "node src/cli.mjs build",
+    "sync": "node src/cli.mjs sync",
+    "test": "node --test src/**/*.test.mjs"
+  },
+  "keywords": [
+    "video",
+    "knowledge-base",
+    "agent",
+    "browser-automation",
+    "playwright",
+    "web-subagent",
+    "douyin",
+    "bilibili",
+    "youtube",
+    "zero-cost",
+    "multimodal"
+  ],
+  "author": "VideoMind Contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jiayi-hu/videomind"
+  },
+  "dependencies": {
+    "playwright-core": "^1.61.1"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
