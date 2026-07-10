@@ -151,6 +151,37 @@ node src/cli.mjs build
 node src/cli.mjs sync --sink markdown
 ```
 
+## ⚙️ 配置（zod 校验 + .env 覆盖）
+
+所有命令参数在启动时由 [`zod`](https://github.com/colinhacks/zod) schema 校验，错误立刻打印带字段路径的提示并退出（exit code 2）：
+
+```bash
+# 错误示例
+$ node src/cli.mjs analyze --mode banana --analyzer gpt4
+[ConfigError] Invalid configuration for command "analyze"
+
+Configuration problems:
+  - analyzer: Invalid option: expected one of "doubao"|"kimi"|"gemini"|"claude"
+  - mode: Invalid option: expected one of "sequential"|"parallel"
+
+Tip: check CLI args, env vars, or .env file. Run with --help to see defaults.
+```
+
+**优先级**：CLI args > 环境变量 > `.env` 文件 > defaults。
+
+**用 `.env` 覆盖**（项目根新建 `.env`，参考 [`.env.example`](.env.example)）：
+
+```bash
+# .env
+COLLECT_PLATFORM=bilibili
+ANALYZE_MODE=parallel
+ANALYZE_NO_CHECKPOINT=true
+LOG_LEVEL=info
+LOG_FILE=./videomind.log
+```
+
+支持的 env 变量按命令前缀分组（`COLLECT_*` / `ANALYZE_*` / `BUILD_*` / `SYNC_*`），未加前缀的全局变量（`LOG_LEVEL` / `LOG_FILE`）被 logger 消费。详见 [`src/core/config.mjs`](src/core/config.mjs)。
+
 ## 🪵 可观测性（结构化日志）
 
 所有运行日志通过 [`pino`](https://github.com/pinojs/pino) 输出为 JSON，每行带 `requestId` / `stage` / `component` 字段，便于按批次关联：

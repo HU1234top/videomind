@@ -9,6 +9,7 @@ import { MarkdownSink } from './sinks/markdown.mjs';
 import { Orchestrator } from './core/orchestrator.mjs';
 import { getLimiter } from './core/rate-limiter.mjs';
 import { createLogger } from './core/logger.mjs';
+import { loadConfig, ConfigError, SUPPORTED_PLATFORMS, SUPPORTED_ANALYZERS, SUPPORTED_SINKS, SUPPORTED_MODES } from './core/config.mjs';
 import { chromium } from 'playwright-core';
 
 const args = process.argv.slice(2);
@@ -18,16 +19,16 @@ const logger = createLogger({ name: 'videomind', base: { component: 'cli' } });
 async function main() {
   switch (command) {
     case 'collect':
-      await collect(args);
+      await runWithConfig('collect', collect);
       break;
     case 'analyze':
-      await analyze(args);
+      await runWithConfig('analyze', analyze);
       break;
     case 'build':
-      await build(args);
+      await runWithConfig('build', build);
       break;
     case 'sync':
-      await sync(args);
+      await runWithConfig('sync', sync);
       break;
     default:
       console.log(`
@@ -40,24 +41,45 @@ Usage:
   node src/cli.mjs sync      --sink <sink>
 
 Options:
-  --platform    douyin | bilibili | youtube (default: douyin)
+  --platform    ${SUPPORTED_PLATFORMS.join(' | ')} (default: douyin)
   --collection  Favorites collection name (default: skills)
-  --analyzer    doubao | kimi | gemini | claude (default: doubao)
-  --sink        markdown | lexiang | obsidian | notion (default: markdown)
-  --mode        sequential | parallel (default: sequential)
+  --analyzer    ${SUPPORTED_ANALYZERS.join(' | ')} (default: doubao)
+  --sink        ${SUPPORTED_SINKS.join(' | ')} (default: markdown)
+  --mode        ${SUPPORTED_MODES.join(' | ')} (default: sequential)
   --cdp-port    Chrome CDP port (default: 9222)
 
 Prerequisites:
   Start Chrome with remote debugging:
   chrome.exe --remote-debugging-port=9222
+
+Configuration is validated at startup. Errors are printed with field paths.
+See .env.example for environment variable overrides.
       `);
   }
 }
 
-async function collect(args) {
-  const platform = getArg(args, '--platform') || 'douyin';
-  const collection = getArg(args, '--collection') || 'skills';
-  const cdpPort = parseInt(getArg(args, '--cdp-port') || '9222');
+/**
+ * Wrap a command handler with config validation.
+ * ConfigError is logged as fatal and the process exits with code 2.
+ */
+async function runWithConfig(commandName, handler) {
+  let cfg;
+  try {
+    // The command name is the first arg; pass the rest to loadConfig
+    cfg = loadConfig(commandName, { argv: args.slice(1) });
+  } catch (e) {
+    if (e instanceof ConfigError) {
+      logger.fatal({ command: commandName, issues: e.issues }, 'invalid configuration');
+      process.stderr.write('\n' + e.format() + '\n');
+      process.exit(2);
+    }
+    throw e;
+  }
+  await handler(cfg);
+}
+
+async function collect(cfg) {
+  const { platform, collection, cdpPort, outputFile } = cfg;
 
   logger.info({ stage: 'collect', cdpPort, platform, collection }, 'connecting to Chrome CDP');
   const browser = await chromium.connectOverCDP(`http://localhost:${cdpPort}`);
@@ -70,22 +92,25 @@ async function collect(args) {
 
     // Save to file
     const fs = await import('fs');
-    fs.writeFileSync('video_list.json', JSON.stringify(videos, null, 2));
+    fs.writeFileSync(outputFile, JSON.stringify(videos, null, 2));
   }
 
   await browser.close();
 }
 
-async function analyze(args) {
-  const analyzerName = getArg(args, '--analyzer') || 'doubao';
-  const mode = getArg(args, '--mode') || 'sequential';
-  const cdpPort = parseInt(getArg(args, '--cdp-port') || '9222');
+async function analyze(cfg) {
+  const { analyzer: analyzerName, mode, cdpPort, inputFile, outputFile, checkpointEnabled, checkpointDb } = cfg;
 
   logger.info({ stage: 'analyze', analyzer: analyzerName, mode }, 'analysis starting');
 
   // Checkpoint setup (Phase A Task 1 — resume on failure)
   const { Checkpoint, checkpointConfigFromArgs } = await import('./core/checkpoint.mjs');
-  const cpCfg = checkpointConfigFromArgs(args);
+  // checkpointConfigFromArgs still operates on the raw argv; pass it the original
+  // CLI slice (args minus the command name) so existing behavior is preserved.
+  const cpCfg = checkpointConfigFromArgs(args.slice(1));
+  // Override with validated values (single source of truth)
+  cpCfg.enabled = checkpointEnabled;
+  if (checkpointDb) cpCfg.dbPath = checkpointDb;
   const checkpoint = new Checkpoint(cpCfg);
   if (checkpoint.enabled) {
     const stats = checkpoint.getStats();
@@ -101,7 +126,7 @@ async function analyze(args) {
 
   // Load video list
   const fs = await import('fs');
-  const videos = JSON.parse(fs.readFileSync('video_list.json', 'utf8'));
+  const videos = JSON.parse(fs.readFileSync(inputFile, 'utf8'));
 
   // Register all videos in checkpoint (idempotent)
   if (checkpoint.enabled) {
@@ -128,8 +153,8 @@ async function analyze(args) {
   const finalResults = checkpoint.enabled
     ? checkpoint.getCompletedResults()
     : results;
-  fs.writeFileSync('video_analysis.json', JSON.stringify(finalResults, null, 2));
-  logger.info({ stage: 'analyze', total: finalResults.length, expected: videos.length }, 'analysis complete');
+  fs.writeFileSync(outputFile, JSON.stringify(finalResults, null, 2));
+  logger.info({ stage: 'analyze', total: finalResults.length, expected: videos.length, outputFile }, 'analysis complete');
 
   // Print checkpoint + rate limiter stats
   if (checkpoint.enabled) {
@@ -143,24 +168,24 @@ async function analyze(args) {
   await orchestrator.shutdown();
 }
 
-async function build(args) {
-  const input = getArg(args, '--input') || 'video_analysis.json';
-  
+async function build(cfg) {
+  const { inputFile, outputFile } = cfg;
+
   const fs = await import('fs');
-  const analyses = JSON.parse(fs.readFileSync(input, 'utf8'));
-  
+  const analyses = JSON.parse(fs.readFileSync(inputFile, 'utf8'));
+
   const builder = new KnowledgeBuilder();
   const kb = builder.build(analyses);
-  
-  fs.writeFileSync('structured_knowledge_base.json', JSON.stringify(kb, null, 2));
-  logger.info({ stage: 'build', total: kb.summary.total, categories: Object.keys(kb.categoryDistribution).length }, 'knowledge base built');
+
+  fs.writeFileSync(outputFile, JSON.stringify(kb, null, 2));
+  logger.info({ stage: 'build', total: kb.summary.total, categories: Object.keys(kb.categoryDistribution).length, outputFile }, 'knowledge base built');
 }
 
-async function sync(args) {
-  const sinkName = getArg(args, '--sink') || 'markdown';
+async function sync(cfg) {
+  const { sink: sinkName, inputFile, outputDir } = cfg;
 
   const fs = await import('fs');
-  const kb = JSON.parse(fs.readFileSync('structured_knowledge_base.json', 'utf8'));
+  const kb = JSON.parse(fs.readFileSync(inputFile, 'utf8'));
 
   if (sinkName === 'markdown') {
     const sink = new MarkdownSink();
@@ -174,11 +199,6 @@ async function sync(args) {
   } else {
     logger.warn({ stage: 'sync', sink: sinkName }, 'sink not implemented, available: markdown, obsidian');
   }
-}
-
-function getArg(args, flag) {
-  const idx = args.indexOf(flag);
-  return idx >= 0 && idx + 1 < args.length ? args[idx + 1] : null;
 }
 
 main().catch((e) => {

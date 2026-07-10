@@ -12,7 +12,7 @@
 | 1 | SQLite checkpoint 断点续传 | ✅ Done (2026-07) | 1d | `src/core/checkpoint.mjs` — 注册/状态机/缓存读取，21 单测 |
 | 2 | 采集层 selector 视觉 fallback | 📋 Planned | 2-3d | 截图+OCR 兜底（Phase 2 抖音改版时会救命） |
 | 3 | pino/winston 结构化日志 | ✅ Done (2026-07) | 0.5d | `src/core/logger.mjs` — pino 多目的地（stdout+可选 LOG_FILE）+ requestId 追踪 + child 子 logger + 18 单测 |
-| 4 | .env + zod 配置校验 | 📋 Planned | 0.5d | 启动时报错而非运行时崩溃 |
+| 4 | .env + zod 配置校验 | ✅ Done (2026-07) | 0.5d | `src/core/config.mjs` — zod schema 校验 collect/analyze/build/sync 四个命令 + .env 解析 + 错误带字段路径 + 37 单测 |
 | 6 | 修"其他"分类 keywords=[] bug | ✅ Done (2026-07) | 0.5h | "其他" 现作为兜底，未匹配视频不再被丢弃 |
 | 7 | 核心路径测试（mock analyze → build → markdown） | ✅ Done (2026-07) | 1.5h | 10 个端到端测试覆盖 build → markdown + obsidian |
 | 8 | 豆包结构化 JSON 输出 + 降级 | ✅ Done (2026-07) | 1d | `tryParseJSON` 三段解析（直接/code block/平衡花括号） + 正则降级 + 29 单测 |
