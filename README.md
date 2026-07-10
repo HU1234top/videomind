@@ -16,14 +16,6 @@
 
 ---
 
-> ⚠️ **当前定位：带验证 POC 的 MVP 演示，不是产品。**
->
-> **目前唯一能跑通的闭环**：抖音收藏夹采集 → 豆包网页 AI 分析 → 本地 Markdown 输出。
-> B 站、YouTube、Kimi、Gemini、Claude、Notion、Obsidian、Lexiang **都还没写**，代码里调用会抛 `not yet implemented`。
-> 真实实现状态见 [docs/STATUS.md](docs/STATUS.md)。Roadmap 见 [ROADMAP.md](ROADMAP.md)。
-
----
-
 <a id="中文"></a>
 
 ## 🎯 一句话定位
@@ -110,7 +102,7 @@ Sink: 乐享/Notion/Obsidian/Markdown
 
 **怎么做到零成本的？**
 
-1. **不下载视频** — 视频软件有防下载保护，很多视频根本下载不了。VideoMind 直接在浏览器里操作，跟人看视频一样，绕过下载限制。
+1. **不下载视频** — 抖音有防下载保护，很多视频根本下载不了。VideoMind 直接在浏览器里操作，跟人看视频一样，绕过下载限制。
 2. **复用你已登录的浏览器** — Chrome CDP :9222 连接真实浏览器，跳过登录和 Cookie 管理。
 3. **利用网页版免费额度** — 豆包/Kimi/Gemini/Claude 都有网页端免费使用额度，且**不限流**。Playwright 自动化操作 = 免费调用多模态能力。
 4. **本地 Agent 只做调度** — 规划任务、组装 prompt、合并结果，深度推理全交给免费 Web AI。
@@ -211,6 +203,7 @@ node src/cli.mjs sync --sink markdown
 | Builder | KnowledgeBuilder | 8 类自动分类（"其他" 兜底 bug 已修复）+ Levenshtein 去重（阈值 0.6） |
 | Sink | 本地 Markdown | YAML frontmatter + 章节化输出 |
 | Sink | 🟣 Obsidian | Vault 模式（README + categories/ + videos/ + daily/ + wikilinks + frontmatter，Phase A Task 6） |
+| Checkpoint | SQLite | 断点续传：跑 76 视频中途崩了下次自动从断点继续（Phase A Task 1） |
 
 ### 🟡 部分能用（功能受限）
 
