@@ -1,0 +1,65 @@
+{
+  "version": "2026-07-10",
+  "lastVerified": "2026-07-10",
+  "platform": "douyin",
+  "verifiedOn": "咕咕鸟的抖音",
+  "userAgent": "Edg/150.0.4078.48",
+  "notes": [
+    "抖音 PC web 只有「收藏」一个 tab，没有子分类。",
+    "CSS class 全是 webpack 哈希混淆 (RZuwF26I 等)，不能依赖。",
+    "用 [data-e2e] 属性 + 结构选择器 (a[href*='/video/']) 兜底。",
+    "dump 依据: research/douyin-selectors-raw.json"
+  ],
+  "selectors": {
+    "userProfileLink": {
+      "primary": "[data-e2e='user-info']",
+      "fallback": [],
+      "stability": "high",
+      "description": "个人主页信息区 (确认登录态)"
+    },
+    "favoritesTab": {
+      "primary": "[data-e2e='user-favorite-tab']",
+      "fallback": [
+        "text=收藏"
+      ],
+      "stability": "high",
+      "description": "从个人主页切到收藏 tab"
+    },
+    "favoritesList": {
+      "primary": "[data-e2e='user-favorite-list']",
+      "fallback": [
+        "[data-e2e='user-post-list']",
+        "[data-e2e='scroll-list']"
+      ],
+      "stability": "high",
+      "description": "收藏视频列表的最外层容器"
+    },
+    "videoCard": {
+      "primary": "[data-e2e='user-post-list'] li",
+      "fallback": [
+        "li:has(a[href*='/video/'])",
+        "ul[data-e2e='scroll-list'] > li"
+      ],
+      "stability": "high",
+      "description": "单个视频卡片 (li 元素)"
+    },
+    "videoLink": {
+      "primary": "a[href*='/video/']",
+      "fallback": [],
+      "stability": "high",
+      "description": "视频链接，提取视频 URL"
+    },
+    "videoTitle": {
+      "primary": "a[href*='/video/'] img[alt]:not([alt=''])",
+      "fallback": [],
+      "stability": "medium",
+      "description": "标题在 img alt 属性里 (实测确认)"
+    },
+    "videoCover": {
+      "primary": "a[href*='/video/'] img",
+      "fallback": [],
+      "stability": "high",
+      "description": "封面图 URL"
+    }
+  }
+}
