@@ -15,7 +15,7 @@
 | **Obsidian Sink** | `src/sinks/obsidian.mjs` | **Vault mode: README + categories/ + videos/ + daily/ + wikilinks + frontmatter** |
 | Orchestrator | `src/core/orchestrator.mjs` | Sequential mode with retry + fallback, honest fallback chain (only doubao works) |
 | CLI | `src/cli.mjs` | collect/analyze/build/sync commands, rate limiter stats on completion, markdown + obsidian sinks |
-| Unit Tests | `src/core/rate-limiter.test.mjs`, `src/sinks/obsidian.test.mjs`, `src/core/pipeline.test.mjs`, `src/core/checkpoint.test.mjs` | 83 cases total: rate limiter (29), obsidian vault (23), e2e pipeline (10), checkpoint (21) |
+| Unit Tests | `src/core/rate-limiter.test.mjs`, `src/sinks/obsidian.test.mjs`, `src/core/pipeline.test.mjs`, `src/core/checkpoint.test.mjs`, `src/analyzers/doubao-json.test.mjs` | 112 cases total: rate limiter (29), obsidian vault (23), e2e pipeline (10), checkpoint (21), JSON parser (29) |
 
 ## 🔧 Recently Fixed (from code review + Phase A)
 
@@ -49,7 +49,7 @@
 | 6. "其他" 分类 bug 修复 | ✅ Done (2026-07-09) | `src/builders/knowledge-builder.mjs:categorize` |
 | 7. 核心路径测试 | ✅ Done (2026-07-09) | `src/core/pipeline.test.mjs` — 10 tests |
 | 8. Obsidian Sink | ✅ Done (2026-07-09) | `src/sinks/obsidian.mjs` — 23 tests |
-| 9. 豆包结构化 JSON 输出 + 降级 | 📋 Planned | Prompt 加 JSON 指令 + JSON.parse，失败降级正则 |
+| 9. 豆包结构化 JSON 输出 + 降级 | ✅ Done (2026-07-10) | `src/analyzers/doubao.mjs` — prompt 加 JSON 指令 + `tryParseJSON`（直接/code block/平衡花括号三段解析） + 正则降级 + `parseMode: 'json'|'regex'` 标记，29 单测 |
 
 ## ❌ Not Yet Implemented (Phase B/C/D)
 

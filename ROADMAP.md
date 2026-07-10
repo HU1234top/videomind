@@ -15,7 +15,7 @@
 | 4 | .env + zod 配置校验 | 📋 Planned | 0.5d | 启动时报错而非运行时崩溃 |
 | 6 | 修"其他"分类 keywords=[] bug | ✅ Done (2026-07) | 0.5h | "其他" 现作为兜底，未匹配视频不再被丢弃 |
 | 7 | 核心路径测试（mock analyze → build → markdown） | ✅ Done (2026-07) | 1.5h | 10 个端到端测试覆盖 build → markdown + obsidian |
-| 8 | 豆包结构化 JSON 输出 + 正则降级 | 📋 Planned | 1d | 当前正则解析脆弱性极高 |
+| 8 | 豆包结构化 JSON 输出 + 降级 | ✅ Done (2026-07) | 1d | `tryParseJSON` 三段解析（直接/code block/平衡花括号） + 正则降级 + 29 单测 |
 | 9 | Obsidian Sink | ✅ Done (2026-07) | 2h | vault 结构 + wikilinks + frontmatter + daily note |
 
 ## Phase B: 增效

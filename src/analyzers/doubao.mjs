@@ -1,8 +1,8 @@
 /**
  * Doubao Analyzer — Use Doubao (doubao.com) as Web-SubAgent for video analysis
- * 
+ *
  * MVP validated: 77/76 videos = 100% coverage (49 deep + 28 enhanced basic)
- * 
+ *
  * Key innovation: Skill-focused 10-dimension framework
  * Unlike generic "summary + tags" approaches, this treats each video
  * as a learnable SKILL UNIT and outputs: what to learn → how to learn
@@ -16,235 +16,94 @@ export class DoubaoAnalyzer {
     this.context = context;
     this.url = 'https://doubao.com';
     this.maxRetries = 3;
-    this.baseDelay = 2000; // base delay for exponential backoff (2s)
+    this.baseDelay = 2000;
     this.limiter = getLimiter('doubao');
   }
 
   /**
-   * Analyze a video using Doubao's web interface.
-   *
-   * Improvements over original:
-   * - Exponential backoff retry (max 3 attempts)
-   * - CAPTCHA / verification page detection
-   * - Dynamic generation completion detection (no magic timeouts)
-   * - Health check: verify page loaded correctly before proceeding
-   *
+   * Analyze a video using Doubao's web interface
    * @param {Object} video - Video metadata (title, author, comments, transcript, tags)
-   * @param {Object} options - { attempt, maxRetries } for retry context
+   * @param {Array} attachments - Screenshots or additional data
    * @returns {Object} Structured 10-dimension skill analysis
    */
-  async analyze(video, options = {}) {
-    const maxRetries = options.maxRetries || this.maxRetries;
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+  async analyze(video, attachments = []) {
+    let lastError;
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       // Adaptive pre-request delay (learned from previous attempts)
       await this.limiter.delay();
 
       const t0 = Date.now();
       try {
-        const result = await this._doAnalyze(video, attempt);
-        const elapsed = Date.now() - t0;
-        this.limiter.recordSuccess(elapsed);
+        const result = await this._doAnalyze(video, attachments);
+        this.limiter.recordSuccess(Date.now() - t0);
         return result;
       } catch (e) {
-        // Don't retry on CAPTCHA — user must handle manually
+        lastError = e;
+        const msg = (e.message || '').toLowerCase();
+
+        // CAPTCHA: back off hard, give up
         if (e.code === 'CAPTCHA_DETECTED') {
           this.limiter.recordThrottle(3, 'CAPTCHA');
           throw e;
         }
-
-        console.log(`[Doubao] Attempt ${attempt}/${maxRetries} failed: ${e.message}`);
-
-        // Detect throttle vs transient error and feed the limiter
-        const msg = (e.message || '').toLowerCase();
+        // Throttle signals
         if (msg.includes('429') || msg.includes('too many') || msg.includes('rate limit')) {
-          this.limiter.recordThrottle(2, msg.match(/\d{3}/)?.[0] || 'rate-limit');
+          this.limiter.recordThrottle(2, '429/rate-limit');
         } else if (msg.includes('503') || msg.includes('unavailable') || msg.includes('timeout')) {
           this.limiter.recordThrottle(1, '503/timeout');
         } else {
           this.limiter.recordError();
         }
 
-        if (attempt < maxRetries) {
-          const delay = this.baseDelay * Math.pow(2, attempt - 1);
-          console.log(`[Doubao] Retrying in ${delay}ms...`);
-          await new Promise(r => setTimeout(r, delay));
+        console.log(`[Doubao] Attempt ${attempt}/${this.maxRetries} failed: ${e.message}`);
+
+        if (attempt < this.maxRetries) {
+          const backoff = this.baseDelay * Math.pow(2, attempt - 1);
+          await new Promise(r => setTimeout(r, backoff));
         }
       }
     }
-    throw new Error(`Doubao analysis failed after ${maxRetries} attempts for: ${video.title}`);
+    throw new Error(`Doubao analysis failed after ${this.maxRetries} attempts: ${lastError?.message}`);
   }
 
   /**
    * Single attempt at analyzing a video.
    */
-  async _doAnalyze(video, attempt) {
+  async _doAnalyze(video, attachments = []) {
     const page = await this.context.newPage();
     try {
-      // Step 1: Navigate to Doubao
-      await page.goto(this.url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await page.goto(this.url);
+      await page.waitForLoadState('networkidle');
 
-      // Step 2: Health check — verify page loaded correctly
-      await this.healthCheck(page);
+      // Navigate to new conversation
+      await page.click('[data-e2e="new-conversation"]').catch(() => {});
+      await page.waitForTimeout(1000);
 
-      // Step 3: Check for CAPTCHA
-      if (await this.detectCaptcha(page)) {
-        const err = new Error('CAPTCHA detected on Doubao — please handle manually in your browser, then retry');
-        err.code = 'CAPTCHA_DETECTED';
-        throw err;
-      }
-
-      // Step 4: Navigate to new conversation
-      const newChatBtns = [
-        '[data-e2e="new-conversation"]',
-        '.new-chat-btn',
-        'button[class*="new"]',
-        '[aria-label*="new"]',
-      ];
-      for (const selector of newChatBtns) {
-        await page.click(selector).catch(() => {});
-      }
-      await page.waitForTimeout(1500);
-
-      // Step 5: Build and input the analysis prompt
+      // Construct skill-focused analysis prompt
       const prompt = this.buildPrompt(video);
-      const inputSelectors = [
-        '.chat-input',
-        'textarea',
-        '[data-e2e="chat-input"]',
-        '[class*="input-box"]',
-        '[role="textbox"]',
-      ];
-      let inputBox = null;
-      for (const sel of inputSelectors) {
-        inputBox = page.locator(sel).first();
-        if (await inputBox.isVisible().catch(() => false)) break;
-        inputBox = null;
-      }
-      if (!inputBox) throw new Error('Cannot find Doubao chat input box');
 
+      // Input prompt into Doubao's chat interface
+      const inputBox = await page.locator('.chat-input, textarea, [data-e2e="chat-input"]').first();
       await inputBox.fill(prompt);
       await inputBox.press('Enter');
 
-      // Step 6: Dynamic wait for generation completion
-      await this.waitForGeneration(page);
+      // Wait for Doubao to finish generating
+      await page.waitForTimeout(30000); // 30s for generation
 
-      // Step 7: Extract response text
-      const responseSelectors = [
-        '.assistant-message',
-        '.ai-response',
-        '[data-e2e="assistant-message"]',
-        '[class*="response"]',
-      ];
-      let response = null;
-      for (const sel of responseSelectors) {
-        const el = page.locator(sel).last();
-        const text = await el.textContent().catch(() => null);
-        if (text && text.trim().length > 50) {
-          response = text;
-          break;
-        }
-      }
-      if (!response) throw new Error('Could not extract Doubao response text');
+      // Try to detect completion
+      const stopBtn = page.locator('[data-e2e="stop-generating"]');
+      try {
+        await stopBtn.waitFor({ state: 'hidden', timeout: 60000 });
+      } catch { /* generation may already be complete */ }
 
-      // Step 8: Parse into structured 10-dimension format
+      // Extract the response text
+      const response = await page.locator('.assistant-message, .ai-response').last().textContent();
+
+      // Parse into structured 10-dimension format
       return this.parseResponse(video, response);
     } finally {
       await page.close();
     }
-  }
-
-  /**
-   * Health check: verify Doubao page loaded correctly.
-   */
-  async healthCheck(page) {
-    // Check that we're actually on doubao.com
-    const url = page.url();
-    if (!url.includes('doubao.com') && !url.includes('doubao')) {
-      throw new Error(`Not on Doubao page — current URL: ${url}`);
-    }
-    // Check that page body exists
-    const body = await page.locator('body').isVisible().catch(() => false);
-    if (!body) throw new Error('Doubao page appears blank or not loaded');
-  }
-
-  /**
-   * Detect CAPTCHA / verification pages.
-   */
-  async detectCaptcha(page) {
-    const captchaSignals = [
-      // Generic CAPTCHA patterns
-      'iframe[src*="captcha"]',
-      '[class*="captcha"]',
-      '[id*="captcha"]',
-      'img[src*="captcha"]',
-      // Verification page text
-      'text=验证',
-      'text=请完成验证',
-      'text=安全验证',
-      // Slider verification
-      '[class*="slider-verify"]',
-      '[class*="verify"]',
-    ];
-    for (const sel of captchaSignals) {
-      const found = await page.locator(sel).first().isVisible().catch(() => false);
-      if (found) return true;
-    }
-    return false;
-  }
-
-  /**
-   * Dynamic wait for AI generation completion.
-   * Instead of magic 30s + 60s timeouts, we:
-   * 1. Wait for the "stop generating" button to appear (generation started)
-   * 2. Then wait for it to disappear (generation finished)
-   * 3. If no stop button found, wait for response text to stabilize
-   */
-  async waitForGeneration(page) {
-    // Phase 1: Wait for generation to start (stop button appears)
-    const stopBtnSelectors = [
-      '[data-e2e="stop-generating"]',
-      '[class*="stop-generating"]',
-      '[class*="stop"]',
-      'button[aria-label*="stop"]',
-    ];
-
-    let stopBtn = null;
-    for (const sel of stopBtnSelectors) {
-      stopBtn = page.locator(sel).first();
-      if (await stopBtn.isVisible({ timeout: 5000 }).catch(() => false)) break;
-      stopBtn = null;
-    }
-
-    if (stopBtn) {
-      // Phase 2: Wait for stop button to disappear (generation complete)
-      try {
-        await stopBtn.waitFor({ state: 'hidden', timeout: 120000 });
-      } catch {
-        // Timeout — generation may be very long, try to proceed anyway
-        console.log('[Doubao] Generation timeout (120s), proceeding with partial response');
-      }
-    } else {
-      // No stop button detected — fallback: wait for response text to stabilize
-      // Check every 3s if the last response element text has changed
-      let lastText = '';
-      let stableCount = 0;
-      for (let i = 0; i < 20; i++) { // max 60s
-        await page.waitForTimeout(3000);
-        const currentText = await page.locator('.assistant-message, .ai-response, [class*="response"]').last()
-          .textContent().catch(() => '');
-        if (currentText === lastText && currentText.length > 100) {
-          stableCount++;
-          if (stableCount >= 2) break; // Stable for 6s = done
-        } else {
-          stableCount = 0;
-        }
-        lastText = currentText;
-      }
-    }
-
-    // Small buffer after generation completes
-    await page.waitForTimeout(1000);
   }
 
   /**
@@ -256,7 +115,7 @@ export class DoubaoAnalyzer {
    */
   buildPrompt(video) {
     const videoTags = video.tags?.join(', ') || '无';
-    const topComments = video.comments?.slice(0, 5).map(c => 
+    const topComments = video.comments?.slice(0, 5).map(c =>
       typeof c === 'string' ? c : `${c.author}: ${c.text}`
     ).join('\n') || '无';
 
@@ -285,17 +144,142 @@ ${topComments}
 9. **学习路径** — 建议跟哪些类型的视频组合学习效果更好？
 10. **关键词标签** — 3-5个自动分类标签（如 #AI-Agent #爬虫 #开源工具）
 
-每个维度请给出具体、可操作的内容，不要泛泛而谈。`;
+每个维度请给出具体、可操作的内容，不要泛泛而谈。
+
+## 输出格式（严格 JSON）
+
+请**仅**以一个合法的 JSON 对象回复，不要包含任何其他文字、Markdown 代码块标记或解释。格式如下：
+
+{"skill_name":"...","skill_level":"入门|中级|高级|专家","key_points":["...", "..."],"action_steps":["...", "..."],"tools_resources":["...", "..."],"pitfalls":["...", "..."],"use_cases":"...","prerequisites":"...","learning_path":"...","auto_tags":["#tag1", "#tag2"]}
+
+- 字符串值用中文
+- 数组值用 ["项1", "项2"] 格式
+- 缺失信息填 "" 或 []
+- 不要使用 markdown 代码块包裹
+- 不要添加任何说明文字`;
+  }
+
+  parseResponse(video, rawText) {
+    // Phase A Task 8: try JSON first (more reliable), fall back to regex
+    const jsonParsed = this.tryParseJSON(rawText);
+    if (jsonParsed) {
+      return this.buildResultFromJSON(video, rawText, jsonParsed);
+    }
+    return this.buildResultFromRegex(video, rawText);
   }
 
   /**
-   * Parse Doubao's text response into structured 10-dimension output.
+   * Attempt to extract a JSON object from the response text.
+   * Handles common LLM output patterns:
+   *  - Raw JSON: {"foo": "bar"}
+   *  - Markdown code block: ```json\n{...}\n```
+   *  - Preamble text + JSON: "Here is the result:\n{...}"
+   *  - Trailing explanation after JSON
    *
-   * Doubao returns Chinese text with numbered sections matching the prompt.
-   * We use regex to extract each dimension. If a dimension can't be parsed,
-   * we fall back to null — downstream consumers should handle nulls.
+   * @param {string} text - Raw model output
+   * @returns {Object|null} Parsed object, or null if no valid JSON found
    */
-  parseResponse(video, rawText) {
+  tryParseJSON(text) {
+    if (!text || typeof text !== 'string') return null;
+
+    // 1. Try direct parse
+    try {
+      const direct = JSON.parse(text.trim());
+      if (direct && typeof direct === 'object') return direct;
+    } catch { /* fall through */ }
+
+    // 2. Extract from markdown ```json ... ``` block
+    const codeBlock = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+    if (codeBlock) {
+      try {
+        const obj = JSON.parse(codeBlock[1]);
+        if (obj && typeof obj === 'object') return obj;
+      } catch { /* fall through */ }
+    }
+
+    // 3. Find first balanced {...} substring
+    const balanced = this.extractBalancedJSON(text);
+    if (balanced) {
+      try {
+        const obj = JSON.parse(balanced);
+        if (obj && typeof obj === 'object') return obj;
+      } catch { /* fall through */ }
+    }
+
+    return null;
+  }
+
+  /**
+   * Find the first balanced { ... } substring (respecting nested braces and strings).
+   * Used as a fallback when JSON is wrapped in prose.
+   */
+  extractBalancedJSON(text) {
+    const start = text.indexOf('{');
+    if (start === -1) return null;
+
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (inString) {
+        if (escape) { escape = false; continue; }
+        if (ch === '\\') { escape = true; continue; }
+        if (ch === '"') inString = false;
+        continue;
+      }
+      if (ch === '"') { inString = true; continue; }
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) return text.slice(start, i + 1);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Build the final result object from a successfully-parsed JSON response.
+   */
+  buildResultFromJSON(video, rawText, parsed) {
+    const dimensions = {
+      skill_name: this.stringOrNull(parsed.skill_name),
+      skill_level: this.stringOrNull(parsed.skill_level),
+      key_points: this.arrayOrNull(parsed.key_points),
+      action_steps: this.arrayOrNull(parsed.action_steps),
+      tools_resources: this.arrayOrNull(parsed.tools_resources),
+      pitfalls: this.arrayOrNull(parsed.pitfalls),
+      use_cases: this.stringOrNull(parsed.use_cases),
+      prerequisites: this.stringOrNull(parsed.prerequisites),
+      learning_path: this.stringOrNull(parsed.learning_path),
+      auto_tags: this.normalizeTags(parsed.auto_tags),
+    };
+
+    // Warn if too many dimensions are null (likely partial parse)
+    const nullCount = Object.values(dimensions).filter(v => v === null || (Array.isArray(v) && v.length === 0)).length;
+    if (nullCount >= 7) {
+      console.log(`[Doubao] JSON parsed but ${nullCount}/10 dimensions empty — response may be incomplete`);
+    }
+
+    return {
+      url: video.url,
+      title: video.title,
+      author: video.author,
+      tags: video.tags || [],
+      platform: 'douyin',
+      analyzer: 'doubao',
+      analysis: rawText,
+      dimensions,
+      parseMode: 'json',
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Build result using the legacy regex-based extractor.
+   * Used when JSON parsing fails (model didn't follow JSON instructions).
+   */
+  buildResultFromRegex(video, rawText) {
     const dimensions = {
       skill_name:     this.extractDimension(rawText, 1, '技能名称'),
       skill_level:    this.extractDimension(rawText, 2, '技能等级'),
@@ -308,7 +292,6 @@ ${topComments}
       learning_path:  this.extractDimension(rawText, 9, '学习路径|组合学习'),
       auto_tags:      this.extractTagsDimension(rawText, 10, '关键词标签|标签'),
     };
-
     return {
       url: video.url,
       title: video.title,
@@ -318,8 +301,43 @@ ${topComments}
       analyzer: 'doubao',
       analysis: rawText,
       dimensions,
+      parseMode: 'regex',
       timestamp: new Date().toISOString(),
     };
+  }
+
+  stringOrNull(v) {
+    if (v === null || v === undefined) return null;
+    const s = String(v).trim();
+    return s.length > 0 ? s : null;
+  }
+
+  arrayOrNull(v) {
+    if (!Array.isArray(v)) return null;
+    const cleaned = v
+      .map(x => String(x).trim())
+      .filter(x => x.length > 0);
+    return cleaned.length > 0 ? cleaned : null;
+  }
+
+  /**
+   * Normalize auto_tags: strip leading "#" if present, dedupe (case-insensitive).
+   * Keeps the first-seen casing.
+   */
+  normalizeTags(v) {
+    const arr = this.arrayOrNull(v);
+    if (!arr) return null;
+    const seen = new Set();
+    const normalized = [];
+    for (const raw of arr) {
+      const t = raw.replace(/^#+/, '').trim();
+      if (!t) continue;
+      const key = t.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      normalized.push(t);
+    }
+    return normalized.length > 0 ? normalized : null;
   }
 
   /**
@@ -327,11 +345,7 @@ ${topComments}
    * Handles formats: "1. 技能名称：XXX" or "**1. 技能名称** — XXX"
    */
   extractDimension(text, num, keyword) {
-    // Wrap keyword with | alternation in non-capturing group
-    // so "前置知识|前提" becomes (?:前置知识|前提), not the whole regex
     const kwGroup = keyword.includes('|') ? `(?:${keyword})` : keyword;
-
-    // Match: "N. <keyword>：content" or "N、<keyword>：content" or "**N** ... keyword ... content"
     const patterns = [
       new RegExp(`(?:\\*\\*)?${num}[\\.、](?:\\*\\*)?[\\s]*${kwGroup}[：:\\s—-]+([^\\n]+)`, 'i'),
       new RegExp(`${kwGroup}[：:\\s]+([^\\n]+)`, 'i'),
@@ -345,59 +359,58 @@ ${topComments}
 
   /**
    * Extract a list dimension (bullet points).
-   * Handles: "- item1\n- item2" or "1）item1  2）item2"
+   * Handles: "- item1\n- item2" or "1）item1\n2）item2"
    */
   extractListDimension(text, num, keyword) {
     const kwGroup = keyword.includes('|') ? `(?:${keyword})` : keyword;
-
-    // First extract the section block
+    // Match header "N. keyword：" (stop at colon, don't eat newlines into the section)
     const sectionPattern = new RegExp(
-      `(?:\\*\\*)?${num}[\\.、](?:\\*\\*)?[\\s]*${kwGroup}[：:\\s—-]+`, 'i'
+      `(?:\\*\\*)?${num}[\\.、](?:\\*\\*)?\\s*${kwGroup}\\s*[:：]`, ''
     );
     const sectionMatch = text.match(sectionPattern);
     if (!sectionMatch) return null;
 
-    // Get text from section start to next numbered section or end
     const startIdx = sectionMatch.index + sectionMatch[0].length;
     const nextSection = text.slice(startIdx).match(/\n\s*\d+[\.、]/);
     const endIdx = nextSection ? startIdx + nextSection.index : text.length;
     const block = text.slice(startIdx, endIdx);
 
-    // Parse bullet items: "- item" or "• item" or "1）item" or "Step N: item"
     const items = [];
-    const bulletPattern = /[-•]\s+([^\n]+)/g;
-    const stepPattern = /(?:Step|步骤)\s*\d+[：:]\s+([^\n]+)/gi;
-    const numberedPattern = /\d+[）)\]]\s+([^\n]+)/g;
+    // Process line-by-line to avoid greedy regex swallowing subsequent bullets
+    const lines = block.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
 
-    for (const p of [bulletPattern, stepPattern, numberedPattern]) {
-      let m;
-      while ((m = p.exec(block)) !== null) {
-        items.push(m[1].trim());
-      }
+      // Match "- item" or "• item"
+      let m = trimmed.match(/^[-•]\s+(.+)$/);
+      if (m) { items.push(m[1].trim()); continue; }
+
+      // Match "Step N: item" or "步骤N：item"
+      m = trimmed.match(/^(?:Step|步骤)\s*\d+[：:]\s+(.+)$/i);
+      if (m) { items.push(m[1].trim()); continue; }
+
+      // Match "1) item" or "1） item" or "1] item"
+      m = trimmed.match(/^\d+[）)\]]\s+(.+)$/);
+      if (m) { items.push(m[1].trim()); continue; }
     }
 
-    // If no structured bullets found, split by semicolons or newlines
     if (items.length === 0 && block.trim()) {
       return block.trim().split(/[;；\n]/).map(s => s.trim()).filter(Boolean);
     }
-
     return items.length > 0 ? items : null;
   }
 
   /**
-   * Extract tags dimension: "#tag1 #tag2" format or comma-separated
+   * Extract tags dimension.
    */
   extractTagsDimension(text, num, keyword) {
     const raw = this.extractDimension(text, num, keyword);
     if (!raw) return null;
-
-    // Extract #hashtag style tags
     const hashTags = raw.match(/#([^\s#,]+)/g);
     if (hashTags && hashTags.length > 0) {
       return hashTags.map(t => t.slice(1).trim());
     }
-
-    // Fall back to comma/中文逗号 split
     return raw.split(/[,，、\s]+/).map(s => s.trim()).filter(s => s.length > 1);
   }
 }
