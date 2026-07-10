@@ -31,9 +31,9 @@
     "url": "https://github.com/HU1234top/videomind"
   },
   "dependencies": {
+    "better-sqlite3": "^12.11.1",
     "playwright-core": "^1.61.1"
   },
-  "devDependencies": {},
   "engines": {
     "node": ">=18.0.0"
   }

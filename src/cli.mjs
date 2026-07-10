@@ -146,12 +146,31 @@ async function analyze(args) {
   const outputPath = resolvePath(outputDir, 'video_analysis.json');
 
   log(`Analyzing with ${analyzerName} in ${mode} mode...`);
-  const orchestrator = new Orchestrator({ cdpPort, mode, primaryAnalyzer: analyzerName });
+
+  // Checkpoint setup (Phase A Task 1 — resume on failure)
+  const { Checkpoint, checkpointConfigFromArgs } = await import('./core/checkpoint.mjs');
+  const cpCfg = checkpointConfigFromArgs(args);
+  const checkpoint = new Checkpoint(cpCfg);
+  if (checkpoint.enabled) {
+    const stats = checkpoint.getStats();
+    if (stats.total > 0) {
+      log(`Resuming: ${stats.completed} done, ${stats.failed} failed, ${stats.in_progress} in progress`);
+    } else {
+      log(`Starting fresh: checkpoint db at ${cpCfg.dbPath}`);
+    }
+  }
+
+  const orchestrator = new Orchestrator({ cdpPort, mode, primaryAnalyzer: analyzerName, checkpoint });
   await orchestrator.init();
 
   const fs = await import('fs');
   const videos = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
   debug(`Loaded ${videos.length} videos from ${inputPath}`);
+
+  // Register all videos in checkpoint (idempotent)
+  if (checkpoint.enabled) {
+    checkpoint.registerBatch(videos.map(v => ({ url: v.url, title: v.title })));
+  }
 
   // Enrich videos with comments before analysis
   if (enrichComments) {
@@ -195,14 +214,22 @@ async function analyze(args) {
     }
   }
 
-  fs.writeFileSync(outputPath, JSON.stringify(results, null, 2));
-  const successCount = results.filter(r => !r.failed).length;
-  log(`Analysis complete: ${successCount}/${videos.length} videos succeeded → ${outputPath}`);
+  // Pull all completed results from checkpoint (so resume + fresh both work)
+  const finalResults = checkpoint.enabled
+    ? checkpoint.getCompletedResults()
+    : results;
+  fs.writeFileSync(outputPath, JSON.stringify(finalResults, null, 2));
+  log(`Analysis complete: ${finalResults.length}/${videos.length} videos succeeded → ${outputPath}`);
 
-  // Print rate limiter stats for observability
+  // Print checkpoint + rate limiter stats
+  if (checkpoint.enabled) {
+    const cpStats = checkpoint.getStats();
+    log(`Checkpoint: ${JSON.stringify(cpStats)}`);
+  }
   const stats = getLimiter('doubao').getStats();
   log(`Doubao rate limiter: ${JSON.stringify(stats)}`);
 
+  checkpoint.close();
   await orchestrator.shutdown();
 }
 

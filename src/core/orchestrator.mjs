@@ -18,6 +18,8 @@ export class Orchestrator {
     // Only include actually-implemented analyzers in fallback chain
     this.fallbackChain = options.fallbackChain || ['doubao'];
     this.maxRetries = options.maxRetries || 3;
+    // Optional checkpoint for resume-on-failure (Phase A Task 1)
+    this.checkpoint = options.checkpoint || null;
   }
 
   async init() {
@@ -48,8 +50,25 @@ export class Orchestrator {
    * Only falls back to actually-implemented analyzers.
    */
   async analyzeSequential(video, primaryAnalyzer, fallbackChain) {
+    // Resume: skip if checkpoint says already done
+    if (this.checkpoint && this.checkpoint.isCompleted(video.url)) {
+      const cached = this.checkpoint.getCachedResult(video.url);
+      if (cached) {
+        console.log(`[VideoMind] ✓ Skipped (cached): "${video.title?.substring(0, 30)}"`);
+        return cached;
+      }
+    }
+
     const chain = fallbackChain || this.fallbackChain;
     for (const analyzerName of chain) {
+      // Mark in_progress (increments attempts, gates max retries)
+      if (this.checkpoint) {
+        const accepted = this.checkpoint.markInProgress(video.url);
+        if (!accepted) {
+          throw new Error(`Max retries exceeded for video: ${video.title}`);
+        }
+      }
+
       let lastError;
       for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
         try {
@@ -57,7 +76,10 @@ export class Orchestrator {
             attempt,
             maxRetries: this.maxRetries,
           });
-          if (result && result.analysis) return result;
+          if (result && result.analysis) {
+            if (this.checkpoint) this.checkpoint.markCompleted(video.url, result);
+            return result;
+          }
         } catch (e) {
           lastError = e;
           console.log(`[VideoMind] ${analyzerName} attempt ${attempt} failed for "${video.title?.substring(0, 30)}": ${e.message}`);
@@ -70,6 +92,8 @@ export class Orchestrator {
       }
       console.log(`[VideoMind] ${analyzerName} exhausted retries, trying next analyzer...`);
     }
+
+    if (this.checkpoint) this.checkpoint.markFailed(video.url, 'all analyzers failed');
     throw new Error(`All analyzers failed for video: ${video.title}`);
   }
 

@@ -9,7 +9,7 @@
 | # | 任务 | 状态 | 工作量 | 备注 |
 |---|------|------|------:|------|
 | **5** | **响应式 rate limiting** | ✅ Done (2026-07) | 1d | 自适应快慢、成功加速、节流退避、慢响应预警、状态持久化 |
-| 1 | SQLite checkpoint 断点续传 | 📋 Next | 1-2d | 用 better-sqlite3 取代 JSON 中间态 |
+| 1 | SQLite checkpoint 断点续传 | ✅ Done (2026-07) | 1d | `src/core/checkpoint.mjs` — 注册/状态机/缓存读取，21 单测 |
 | 2 | 采集层 selector 视觉 fallback | 📋 Planned | 2-3d | 截图+OCR 兜底（Phase 2 抖音改版时会救命） |
 | 3 | pino/winston 结构化日志 | 📋 Planned | 0.5d | requestId 追踪 + 文件输出 |
 | 4 | .env + zod 配置校验 | 📋 Planned | 0.5d | 启动时报错而非运行时崩溃 |
