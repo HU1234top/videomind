@@ -43,15 +43,45 @@ export class KnowledgeBuilder {
 
   categorize(analyses) {
     const result = {};
-    for (const cat of this.categories) {
-      result[cat.name] = analyses.filter(a => this.matchesCategory(a, cat));
+    const assigned = new Set();
+
+    // First pass: assign each video to at most ONE specific category
+    // (the first category whose keywords match). Videos that match no
+    // specific category will be caught by the catch-all below.
+    const specificCats = this.categories.filter(c => c.keywords.length > 0);
+    for (const cat of specificCats) {
+      result[cat.name] = analyses.filter(a => {
+        if (assigned.has(this._key(a))) return false;
+        if (this.matchesCategory(a, cat)) {
+          assigned.add(this._key(a));
+          return true;
+        }
+        return false;
+      });
     }
+
+    // Catch-all: any remaining video goes into the first category with
+    // empty keywords (typically "其他"). Without this, videos that don't
+    // match any specific category are silently DROPPED.
+    const catchAll = this.categories.find(c => c.keywords.length === 0);
+    if (catchAll) {
+      result[catchAll.name] = analyses.filter(a => !assigned.has(this._key(a)));
+    }
+
     return result;
   }
 
   matchesCategory(analysis, category) {
     const text = (analysis.analysis || '').toLowerCase();
     return category.keywords.some(k => text.includes(k.toLowerCase()));
+  }
+
+  /**
+   * Stable identity key for an analysis (used to track "already assigned"
+   * across categories). Falls back to title if URL is missing.
+   */
+  _key(analysis) {
+    return analysis.url || analysis.title || JSON.stringify(analysis).slice(0, 200);
   }
 
   deduplicate(categorized) {

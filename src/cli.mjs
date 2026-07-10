@@ -224,18 +224,18 @@ async function sync(args) {
   const sinkName = getArg(args, '--sink') || 'markdown';
   const inputPath = resolvePath(outputDir, 'structured_knowledge_base.json');
 
-  if (sinkName !== 'markdown') {
-    console.error(`Sink "${sinkName}" not yet implemented. Only "markdown" works currently.`);
-    process.exitCode = 1;
-    return;
+  if (sinkName === 'markdown') {
+    const sink = new MarkdownSink();
+    const result = await sink.sink(kb);
+    log(`Synced to Markdown: ${result.filesWritten} files in ${result.outputDir}`);
+  } else if (sinkName === 'obsidian') {
+    const { ObsidianSink } = await import('./sinks/obsidian.mjs');
+    const sink = new ObsidianSink();
+    const result = await sink.sink(kb);
+    log(`Synced to Obsidian vault: ${result.filesWritten} files (${result.videos} videos, ${result.categories} categories) in ${result.outputDir}`);
+  } else {
+    console.log(`[VideoMind] Sink "${sinkName}" not yet implemented (available: markdown, obsidian)`);
   }
-
-  const fs = await import('fs');
-  const kb = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
-
-  const sink = new MarkdownSink({ outputDir: resolvePath(outputDir, 'output/knowledge-base') });
-  const result = await sink.sink(kb);
-  log(`Synced to Markdown: ${result.filesWritten} files in ${result.outputDir}`);
 }
 
 function getArg(args, flag) {

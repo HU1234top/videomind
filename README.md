@@ -16,6 +16,14 @@
 
 ---
 
+> ⚠️ **当前定位：带验证 POC 的 MVP 演示，不是产品。**
+>
+> **目前唯一能跑通的闭环**：抖音收藏夹采集 → 豆包网页 AI 分析 → 本地 Markdown 输出。
+> B 站、YouTube、Kimi、Gemini、Claude、Notion、Obsidian、Lexiang **都还没写**，代码里调用会抛 `not yet implemented`。
+> 真实实现状态见 [docs/STATUS.md](docs/STATUS.md)。Roadmap 见 [ROADMAP.md](ROADMAP.md)。
+
+---
+
 <a id="中文"></a>
 
 ## 🎯 一句话定位
@@ -45,20 +53,19 @@
 
 ## 🏆 已验证成果
 
-> 不是 PPT，不是假设——这是真实跑出来的数据。
+> 这些数据来自一次真实的端到端跑通（2026-06，76-77 个抖音「skills」收藏夹视频）。
 
-| 指标 | 数值 |
-|------|------|
-| 抖音「skills」收藏夹抓取 | **77 个视频** |
-| 豆包 AI 深度分析 | 77 = 100% 覆盖**（49 深度 + 28 增强基础） |
-| 评论数据提取 | 71 个热门评论（1w赞） |
-| 语音转文字获取 | 77 个 |
-| AI 技术方向自动筛选 | 68 个 |
-| 自动 8 类分类 | ✅ |
-| 乐享知识库入库 | **6 篇文档** |
-| **总 API 成本** | **$0** |
+| 指标 | 数值 | 备注 |
+|------|------|------|
+| 抖音「skills」收藏夹抓取 | **76 个视频** | 实测通过 |
+| 豆包 AI 深度分析 | **77 / 76 = 100% 覆盖** | 49 个获得 10 维度结构化输出，28 个为增强基础（评论+标签） |
+| 评论数据提取 | 71 条 | 由豆包分析阶段附带产出 |
+| AI 技术方向自动筛选 | 68 个 | 关键词过滤（详见 `knowledge-builder.mjs`） |
+| 自动 8 类分类 | ✅ | 基于关键词匹配（注意："其他"分类在初版存在 bug，已修复） |
+| 本地 Markdown 输出 | ✅ | YAML frontmatter + Obsidian wikilinks |
+| **总 API 成本** | **$0** | 全程浏览器自动化 + 免费网页 AI |
 
-> ⚠️ 100% 覆盖：77 个视频全部完成分析，其中 49 个获得 10 维度深度结构化输出，28 个获得增强基础分析（评论+转写+标签）。**没有任何视频被遗漏。**
+> ⚠️ **不在这个 PoC 范围内**（README 此前的"语音转写 77 个"声明**不准确**——代码里 `transcript` 字段从未被填充，详见 [docs/STATUS.md](docs/STATUS.md) Known Limitations）。
 
 ## 🏗️ 核心架构
 
@@ -189,67 +196,83 @@ node src/cli.mjs sync --sink markdown
 
 ## 🔌 支持矩阵
 
-> 实际实现状态详见 [docs/STATUS.md](docs/STATUS.md) — README 只列概览，STATUS.md 才是真相。
+> **状态图例**：
+> - ✅ **Verified** — 实测通过，有数据支撑
+> - 🟡 **Partial** — 部分功能能用，但有限制
+> - 📋 **Planned** — 写在 roadmap 里，**代码还没写**
+> - 🔮 **Future** — 远期想法，连设计都没定
 
-### 视频平台（Collector）
+### ✅ 现在能跑（实测）
 
-| 平台 | 特色能力 | 状态 |
-|------|---------|------|
-| 🇨🇳 抖音 | 防下载绕过 + 标签提取 + 评论抓取 | ✅ 已验证（76视频） |
-| 🇨🇳 B站 | 弹幕抓取 + 分P视频 + UP主信息 | ❌ 未实现（Phase 2） |
-| 🌍 YouTube | CC字幕 + 长视频分段 + Chapters | ❌ 未实现（Phase 2） |
-| 🇨🇳 小红书 | 图文笔记 + 标签分类 | ❌ 未实现 |
+| 模块 | 平台/工具 | 验证场景 |
+|------|----------|----------|
+| Collector | 🇨🇳 抖音 | 收藏夹批量抓取（76 视频实测） |
+| Analyzer | 豆包 (doubao.com) | 10 维度技能拆解 + 自适应限流（Phase A Task 5） |
+| Builder | KnowledgeBuilder | 8 类自动分类（"其他" 兜底 bug 已修复）+ Levenshtein 去重（阈值 0.6） |
+| Sink | 本地 Markdown | YAML frontmatter + 章节化输出 |
+| Sink | 🟣 Obsidian | Vault 模式（README + categories/ + videos/ + daily/ + wikilinks + frontmatter，Phase A Task 6） |
 
-> 各平台 Collector 接口统一（`collect(collectionName)`），新增平台只需实现一个 Adapter。
+### 🟡 部分能用（功能受限）
 
-### 网页 AI（Analyzer）
+| 模块 | 说明 |
+|------|------|
+| Collector 评论抓取 | 能用，但每次抓前要等 2s 让评论区加载；分析阶段会再补一次 |
+| Orchestrator 并行模式 | 代码在，但因为只有 1 个 Analyzer 可用，实际等价于串行 |
+| Obsidian Sink Dataview 查询 | 已生成 Dataview 友好的 frontmatter，但需要用户装 Dataview 插件才能用 |
 
-| AI | 擅长 | 成本 | 限制 | 状态 |
-|----|------|------|------|------|
-| 豆包 | 中文理解、视觉分析、技能框架输出 | 免费 | 无限流 | ✅ 已验证（10维度解析 + 重试 + CAPTCHA检测） |
-| Kimi | 长文本、超长上下文 | 免费 | 无限流 | ❌ throw "not yet implemented" |
-| Gemini | 多模态推理、英文 | 免费 | 限流 | ❌ throw "not yet implemented" |
-| Claude | 结构化输出、代码逻辑 | 免费额度 | 限流 | ❌ throw "not yet implemented" |
+### 📋 规划中（**代码还没写**，调用会抛 `not yet implemented`）
 
-> ⚠️ 目前只有豆包 Analyzer 可用。fallback chain 中 kimi/gemini/claude 会直接报错。
+| 模块 | 备注 |
+|------|------|
+| 🇨🇳 B 站 Collector | 需要弹幕/分P/UP主信息处理 |
+| 🌍 YouTube Collector | 需要 CC 字幕/Chapters/长视频分段 |
+| 🇨🇳 小红书 Collector | 图文笔记格式与视频不同 |
+| Kimi / Gemini / Claude Analyzer | 需要适配各平台的网页 UI selectors |
+| Lexiang / Notion Sink | Lexiang 走 MCP connector，Notion 需要 API |
+| 并行模式 + 共识仲裁 | 当前 `arbitrate()` 只是 hardcode 选 doubao |
+| 知识图谱 / Web UI | Phase 3 |
 
-### 知识库（Sink）
+### 🔮 远期想法（连设计都没定）
 
-| 知识库 | 状态 | 备注 |
-|--------|------|------|
-| 乐享知识库 | ⚠️ 部分 | 实际是通过 WorkBuddy MCP 连接器入库，不在本 repo 代码内 |
-| 本地 Markdown | ✅ 已实现 | 含 YAML frontmatter + Obsidian wikilinks |
-| Obsidian | ⚠️ 部分 | Markdown 输出兼容 Obsidian 格式，但无 .obsidian 配置 |
-| Notion | ❌ 未实现（Phase 3） | |
+| 方向 | 描述 |
+|------|------|
+| 小红书 | 图文笔记适配 |
+| 插件市场 | 第三方 Adapter/Analyzer/Sink |
+| 云端部署（可选） | 自托管服务 |
 
-## 🗺️ Roadmap
+> 详见 [ROADMAP.md](ROADMAP.md) 看完整规划，[docs/STATUS.md](docs/STATUS.md) 看每项的真实状态。
 
-### Phase 1: MVP ✅
-- [x] 抖音收藏夹视频抓取（绕过防下载）
-- [x] 抖音标签/评论提取
-- [x] 豆包网页端 10 维度技能分析
-- [x] 100% 覆盖率（76视频全分析）
-- [x] 自动 8 类分类 + 知识库构建
-- [x] 乐享知识库入库
-- [x] 本地 Markdown 输出
+## 🗺️ Roadmap（简版，详情见 [ROADMAP.md](ROADMAP.md)）
 
-### Phase 2: 多平台 + 多 Analyzer
-- [ ] B站收藏夹 Adapter（弹幕抓取）
-- [ ] YouTube Adapter（CC 字幕）
+### Phase A: 固本（当前阶段）
+
+- [x] **Task 5**: 响应式 rate limiting — `src/core/rate-limiter.mjs`（29 单测通过）
+- [ ] **Task 1**: SQLite checkpoint 断点续传
+- [ ] **Task 2**: 采集层 selector 视觉 fallback（截图+OCR）
+- [ ] **Task 3**: pino/winston 结构化日志 + requestId
+- [ ] **Task 4**: .env + zod 配置校验
+- [ ] **Task 6**: 修复"其他"分类 bug（`keywords: []` 永远 false）
+- [ ] **Task 7**: 核心路径测试（mock analyze → build → markdown）
+- [ ] **Task 8**: 豆包结构化 JSON 输出 + 正则降级
+
+### Phase B: 增效
+
 - [ ] Kimi / Gemini / Claude Analyzer
-- [ ] Analyzer Router（自动选择最合适的 AI）
-- [ ] 并行模式 + 共识仲裁
+- [ ] B 站 / YouTube Collector
+- [ ] 任务优先级队列 + 动态并发
+- [ ] 第二个 AI 交叉验证 + 字段置信度评分
 
-### Phase 3: 知识库产品化
-- [ ] 统一知识 Schema v2
-- [ ] 知识图谱可视化
-- [ ] Notion / Obsidian Connector
-- [ ] 本地 Web UI（搜索、复习、技能地图）
+### Phase C: 做深
 
-### Phase 4: 社区生态
-- [ ] 插件市场：更多平台 Adapter
-- [ ] 更多 Analyzer / Sink
-- [ ] 云端部署方案（可选）
+- [ ] 多级标签（领域→技术→工具）
+- [ ] 知识图谱（邻接表/图数据库 + 可执行学习路径）
+- [ ] 本地 Web UI（搜索 + 技能地图）
+
+### Phase D: 开源
+
+- [ ] .github/workflows CI
+- [ ] CONTRIBUTING.md
+- [ ] npm 发布
 
 ## 📁 项目结构
 
