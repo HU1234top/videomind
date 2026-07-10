@@ -2,7 +2,7 @@
   "name": "videomind",
   "version": "0.2.0",
   "description": "VideoMind — Turn your video favorites into a living knowledge base, zero API cost.",
-  "main": "src/cli.mjs",
+  "main": "src/index.mjs",
   "type": "module",
   "scripts": {
     "collect": "node src/cli.mjs collect",
@@ -28,10 +28,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/HU1234top/videomind"
+    "url": "https://github.com/jiayi-hu/videomind"
   },
   "dependencies": {
-    "better-sqlite3": "^12.11.1",
+    "better-sqlite3": "^11.0.0",
+    "pino": "^10.3.1",
     "playwright-core": "^1.61.1"
   },
   "engines": {

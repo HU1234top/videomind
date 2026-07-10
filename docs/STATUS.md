@@ -10,12 +10,13 @@
 | Douyin Collector | `src/collectors/douyin.mjs` | Favorites collection scraping, tag extraction, comment fetching (with adaptive rate limiter) |
 | Doubao Analyzer | `src/analyzers/doubao.mjs` | Full 10-dimension parsing, retry + CAPTCHA detection, dynamic generation wait, adaptive rate limiting |
 | Adaptive Rate Limiter | `src/core/rate-limiter.mjs` | Per-platform adaptive throttling: shrinks on sustained success, back-offs on 429/503/CAPTCHA, persists across runs |
+| Structured Logger | `src/core/logger.mjs` | pino-backed JSON logger with requestId correlation, child loggers per stage, optional file output via LOG_FILE, fallback to console JSON if pino missing |
 | Knowledge Builder | `src/builders/knowledge-builder.mjs` | 8-category classification with "其他" catch-all (fixed: no silent drops), Levenshtein title dedup (0.6 threshold) |
 | Markdown Sink | `src/sinks/markdown.mjs` | YAML frontmatter + Obsidian wikilinks + structured dimension output |
 | **Obsidian Sink** | `src/sinks/obsidian.mjs` | **Vault mode: README + categories/ + videos/ + daily/ + wikilinks + frontmatter** |
 | Orchestrator | `src/core/orchestrator.mjs` | Sequential mode with retry + fallback, honest fallback chain (only doubao works) |
 | CLI | `src/cli.mjs` | collect/analyze/build/sync commands, rate limiter stats on completion, markdown + obsidian sinks |
-| Unit Tests | `src/core/rate-limiter.test.mjs`, `src/sinks/obsidian.test.mjs`, `src/core/pipeline.test.mjs`, `src/core/checkpoint.test.mjs`, `src/analyzers/doubao-json.test.mjs` | 112 cases total: rate limiter (29), obsidian vault (23), e2e pipeline (10), checkpoint (21), JSON parser (29) |
+| Unit Tests | `src/core/rate-limiter.test.mjs`, `src/sinks/obsidian.test.mjs`, `src/core/pipeline.test.mjs`, `src/core/checkpoint.test.mjs`, `src/analyzers/doubao-json.test.mjs`, `src/core/logger.test.mjs` | 130 cases total: rate limiter (29), obsidian vault (23), e2e pipeline (10), checkpoint (21), JSON parser (29), structured logger (18) |
 
 ## 🔧 Recently Fixed (from code review + Phase A)
 
@@ -36,6 +37,7 @@
 | **"其他" 分类 keywords=[] bug** | **P1** | **Fixed: KnowledgeBuilder.categorize now uses first-pass + catch-all, no video is silently dropped** |
 | **Obsidian Sink (Phase A Task 6)** | **P1** | **New `ObsidianSink`: vault structure (README/categories/videos/daily), YAML frontmatter, wikilinks, filename sanitization, 23 unit tests** |
 | **Core path tests (Phase A Task 7)** | **P1** | **10 e2e tests: mock analyze → KnowledgeBuilder → MarkdownSink + ObsidianSink, verifies no silent data loss** |
+| **Structured logging (Phase A Task 3)** | **P1** | **New `src/core/logger.mjs`: pino-backed JSON logger + requestId correlation + child loggers per stage + optional LOG_FILE; replaces 19 scattered console.log calls in cli.mjs / orchestrator.mjs / doubao.mjs / rate-limiter.mjs; 18 unit tests** |
 
 ## 🚧 Phase A — In Progress
 
@@ -43,7 +45,7 @@
 |------|--------|-------|
 | 1. SQLite checkpoint table | ✅ Done (2026-07-09) | `src/core/checkpoint.mjs` — registerBatch / markInProgress / markCompleted / markFailed / getCachedResult / getStats — 21 unit tests |
 | 2. Collector selector visual fallback | 📋 Next | OCR/visual fallback when CSS selectors fail |
-| 3. Structured logging (pino) | 📋 Next | Replace console.log with structured logger + requestId |
+| 3. Structured logging (pino) | ✅ Done (2026-07-10) | `src/core/logger.mjs` — pino 多目的地 (stdout + 可选 LOG_FILE) + requestId 追踪 + child 子 logger + 18 单测 |
 | 4. .env + zod config validation | 📋 Next | Startup validation instead of runtime crashes |
 | 5. Adaptive rate limiting | ✅ Done (2026-07-09) | `src/core/rate-limiter.mjs` — 29 tests |
 | 6. "其他" 分类 bug 修复 | ✅ Done (2026-07-09) | `src/builders/knowledge-builder.mjs:categorize` |

@@ -10,14 +10,16 @@
  */
 
 import { getLimiter } from '../core/rate-limiter.mjs';
+import { createLogger } from '../core/logger.mjs';
 
 export class DoubaoAnalyzer {
-  constructor(context) {
+  constructor(context, options = {}) {
     this.context = context;
     this.url = 'https://doubao.com';
     this.maxRetries = 3;
     this.baseDelay = 2000;
     this.limiter = getLimiter('doubao');
+    this.logger = options.logger || createLogger({ base: { component: 'analyzer', platform: 'doubao' } });
   }
 
   /**
@@ -55,7 +57,7 @@ export class DoubaoAnalyzer {
           this.limiter.recordError();
         }
 
-        console.log(`[Doubao] Attempt ${attempt}/${this.maxRetries} failed: ${e.message}`);
+        this.logger.warn({ stage: 'analyze', platform: 'doubao', attempt, maxRetries: this.maxRetries, err: e.message }, 'attempt failed');
 
         if (attempt < this.maxRetries) {
           const backoff = this.baseDelay * Math.pow(2, attempt - 1);
@@ -258,7 +260,7 @@ ${topComments}
     // Warn if too many dimensions are null (likely partial parse)
     const nullCount = Object.values(dimensions).filter(v => v === null || (Array.isArray(v) && v.length === 0)).length;
     if (nullCount >= 7) {
-      console.log(`[Doubao] JSON parsed but ${nullCount}/10 dimensions empty — response may be incomplete`);
+      this.logger.warn({ stage: 'analyze', platform: 'doubao', nullCount, total: 10 }, 'JSON parsed but dimensions incomplete');
     }
 
     return {

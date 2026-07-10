@@ -19,6 +19,7 @@
 
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
+import { createLogger } from './logger.mjs';
 
 export class AdaptiveRateLimiter {
   /**
@@ -41,6 +42,8 @@ export class AdaptiveRateLimiter {
     this.shrinkFactor = options.shrinkFactor || 0.9;
     this.slowResponseMs = options.slowResponseMs || 45000;
     this.statePath = options.statePath || null;
+    // Optional logger injection (defaults to component-tagged logger)
+    this.logger = options.logger || createLogger({ base: { component: 'rate-limiter', platform: this.platform } });
 
     // Mutable state - restored from disk if available
     this.currentInterval = this.initialInterval;
@@ -86,9 +89,9 @@ export class AdaptiveRateLimiter {
           Math.floor(this.currentInterval * 1.25)
         );
         if (newInterval !== this.currentInterval) {
-          console.log(
-            `[RateLimit:${this.platform}] slow response ${responseMs}ms -> ` +
-            `${this.currentInterval}ms -> ${newInterval}ms`
+          this.logger.warn(
+            { stage: 'rate-limit', event: 'slow_response', responseMs, from: this.currentInterval, to: newInterval },
+            'slow response, light back-off'
           );
           this.currentInterval = newInterval;
           this.successStreak = 0;
@@ -105,9 +108,9 @@ export class AdaptiveRateLimiter {
         Math.floor(this.currentInterval * this.shrinkFactor)
       );
       if (newInterval !== this.currentInterval) {
-        console.log(
-          `[RateLimit:${this.platform}] sustained success ` +
-          `(streak ${this.successStreak}) -> ${this.currentInterval}ms -> ${newInterval}ms`
+        this.logger.info(
+          { stage: 'rate-limit', event: 'shrink', streak: this.successStreak, from: this.currentInterval, to: newInterval },
+          'sustained success, shrinking interval'
         );
         this.currentInterval = newInterval;
       }
@@ -137,9 +140,9 @@ export class AdaptiveRateLimiter {
       Math.floor(this.currentInterval * totalMult)
     );
 
-    console.log(
-      `[RateLimit:${this.platform}] THROTTLE (sev=${severity}, signal=${signal || 'n/a'}) -> ` +
-      `${this.currentInterval}ms -> ${newInterval}ms (streak x${this.throttleStreak})`
+    this.logger.warn(
+      { stage: 'rate-limit', event: 'throttle', severity, signal: signal || 'n/a', streak: this.throttleStreak, from: this.currentInterval, to: newInterval },
+      'throttle, escalating back-off'
     );
     this.currentInterval = newInterval;
     this.saveState();
@@ -160,9 +163,9 @@ export class AdaptiveRateLimiter {
       Math.floor(this.currentInterval * 1.5)
     );
     if (newInterval !== this.currentInterval) {
-      console.log(
-        `[RateLimit:${this.platform}] error -> ` +
-        `${this.currentInterval}ms -> ${newInterval}ms`
+      this.logger.warn(
+        { stage: 'rate-limit', event: 'error', from: this.currentInterval, to: newInterval },
+        'transient error, moderate increase'
       );
       this.currentInterval = newInterval;
     }

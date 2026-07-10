@@ -151,6 +151,29 @@ node src/cli.mjs build
 node src/cli.mjs sync --sink markdown
 ```
 
+## 🪵 可观测性（结构化日志）
+
+所有运行日志通过 [`pino`](https://github.com/pinojs/pino) 输出为 JSON，每行带 `requestId` / `stage` / `component` 字段，便于按批次关联：
+
+```bash
+# 默认：JSON 到 stdout
+node src/cli.mjs analyze
+
+# 输出到文件 + 调级别
+LOG_LEVEL=debug LOG_FILE=./videomind.log node src/cli.mjs analyze
+
+# 测试/CI 静音
+LOG_LEVEL=silent node src/cli.mjs analyze
+```
+
+日志行示例：
+
+```json
+{"level":"info","time":"2026-07-10T03:32:22.944Z","name":"videomind","requestId":"210361d9-...","component":"analyzer","platform":"doubao","stage":"analyze","msg":"analyzed","url":"https://...","title":"Claude Code..."}
+```
+
+按 `requestId` 过滤可重建单个 analyze 批次的完整轨迹。详细字段约定见 [`src/core/logger.mjs`](src/core/logger.mjs)。
+
 ## 📊 技能聚焦分析框架（10维度）
 
 每个视频经过深度分析后输出 **10 个技能学习维度**，专为「收藏夹 = 技能库」场景设计：
