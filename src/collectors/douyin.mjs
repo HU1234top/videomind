@@ -213,6 +213,9 @@ export class DouyinCollector {
   /**
    * Extract #topic tags from Douyin video title
    * Douyin titles use format: "正文内容 #标签1 #标签2 #标签3"
+   *
+   * SeniorDeveloper: 添加过滤 — 纯数字标签(#456)、单字符标签(#A)、
+   * 数字开头标签(#123赞)均被排除。
    */
   extractTags(title) {
     if (!title) return [];
@@ -220,7 +223,14 @@ export class DouyinCollector {
     const tags = [];
     let match;
     while ((match = tagRegex.exec(title)) !== null) {
-      tags.push(match[1]);
+      const tag = match[1];
+      // 排除纯数字标签
+      if (/^\d+$/.test(tag)) continue;
+      // 排除单字符标签
+      if (tag.length < 2) continue;
+      // 排除数字开头标签
+      if (/^\d/.test(tag)) continue;
+      tags.push(tag);
     }
     return tags;
   }

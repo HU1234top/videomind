@@ -13,6 +13,7 @@
 
 import { BaseAnalyzer } from '../core/base-analyzer.mjs';
 import { waitForBodyTextStable, waitForElementTextStable } from '../core/dom-watcher.mjs';
+import { NotLoggedInError } from '../core/analyzer-errors.mjs';
 
 export class DoubaoAnalyzer extends BaseAnalyzer {
   constructor(context, options = {}) {
@@ -30,6 +31,10 @@ export class DoubaoAnalyzer extends BaseAnalyzer {
     const log = this.logger;
     try {
       await page.goto(this.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+      // SeniorDeveloper: Round 11 — 登录态检测，未登录时抛 NotLoggedInError
+      // 让 Router 正确 fallback 到下一个 analyzer，而非浪费 retries
+      await this._checkLoginState(page);
 
       // 等输入框出现 (替代硬编码 selector)
       const inputResult = await waitForElement(page, this.selectors.chatInput, {
@@ -93,6 +98,44 @@ export class DoubaoAnalyzer extends BaseAnalyzer {
     } finally {
       await page.close();
     }
+  }
+
+  /**
+   * SeniorDeveloper: Round 11 — 检测用户是否已登录 doubao.com
+   *
+   * 检查登录按钮等 UI 元素，如果页面处于未登录态则抛 NotLoggedInError。
+   * 让 Router 正确 fallback 到 Kimi 等已登录的 analyzer，而非浪费 retries。
+   *
+   * 判定依据：未登录时 doubao.com 会在页面顶部显示登录/注册按钮或全屏登录引导页。
+   */
+  async _checkLoginState(page) {
+    const loginSelectors = [
+      'button:has-text("登录")',
+      'a:has-text("登录")',
+      'button:has-text("注册")',
+      'button:has-text("免费使用")',
+      '[class*="login"]',
+      '[class*="LoginModal"]',
+    ];
+
+    for (const selector of loginSelectors) {
+      try {
+        const el = page.locator(selector).first();
+        const visible = await el.isVisible({ timeout: 1000 }).catch(() => false);
+        if (visible) {
+          const text = (await el.textContent().catch(() => '')).trim().slice(0, 30);
+          this.logger.info?.({ selector, text }, 'login button detected — user not logged in');
+          // 截图保留现场
+          await captureFailure(page, 'not-logged-in', { logger: this.logger }).catch(() => {});
+          throw new NotLoggedInError('doubao', `login button visible: "${text}" (selector: ${selector})`);
+        }
+      } catch (e) {
+        if (e instanceof NotLoggedInError) throw e;
+        // 超时或元素不存在 → 正常，继续检查
+      }
+    }
+
+    this.logger.debug({}, 'login state check passed — user appears logged in');
   }
 
   buildPrompt(video) {
