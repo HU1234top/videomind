@@ -3,88 +3,27 @@
  *
  * MVP validated: 77/76 videos = 100% coverage (49 deep + 28 enhanced basic)
  *
- * Round 8 改造 (Phase B 第一项):
+ * SeniorDeveloper: 重构为继承 BaseAnalyzer，消除与 kimi.mjs 的重复代码。
+ * 原始逻辑来自 MiniMax M3 (Round 4/8)，retry/JSON解析/10维输出移到基类。
+ *
+ * Round 8 改造:
  *   - 改用 selectors/doubao.json (配置化 selector + 备选链)
  *   - 改用 dom-watcher.mjs 智能等待 (替代硬编码 30s)
- *   - 不再依赖 [data-e2e="stop-generating"] (WorkBuddy 验证: 该属性不稳定)
- *
- * Key innovation: Skill-focused 10-dimension framework
- * Unlike generic "summary + tags" approaches, this treats each video
- * as a learnable SKILL UNIT and outputs: what to learn → how to learn
- * → prerequisites → learning path combinations.
  */
 
-import { getLimiter } from '../core/rate-limiter.mjs';
-import { createLogger } from '../core/logger.mjs';
-import { loadSelectors, waitForElement, captureFailure } from '../core/selector.mjs';
+import { BaseAnalyzer } from '../core/base-analyzer.mjs';
 import { waitForBodyTextStable, waitForElementTextStable } from '../core/dom-watcher.mjs';
 
-export class DoubaoAnalyzer {
+export class DoubaoAnalyzer extends BaseAnalyzer {
   constructor(context, options = {}) {
-    this.context = context;
+    // SeniorDeveloper: 基类接管 context、limiter、logger、selectors 初始化
+    super(context, { platform: 'doubao', ...options });
     this.url = 'https://doubao.com';
-    this.maxRetries = 3;
-    this.baseDelay = 2000;
-    this.limiter = getLimiter('doubao');
-    this.logger = options.logger || createLogger({ base: { component: 'analyzer', platform: 'doubao' } });
-    const config = loadSelectors('doubao');
-    this.config = config;
-    this.selectors = config.selectors;
-  }
-
-  /**
-   * Analyze a video using Doubao's web interface
-   * @param {Object} video - Video metadata (title, author, comments, transcript, tags)
-   * @param {Array} attachments - Screenshots or additional data
-   * @returns {Object} Structured 10-dimension skill analysis
-   */
-  async analyze(video, attachments = []) {
-    let lastError;
-    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
-      // Adaptive pre-request delay (learned from previous attempts)
-      await this.limiter.delay();
-
-      const t0 = Date.now();
-      try {
-        const result = await this._doAnalyze(video, attachments);
-        this.limiter.recordSuccess(Date.now() - t0);
-        return result;
-      } catch (e) {
-        lastError = e;
-        const msg = (e.message || '').toLowerCase();
-
-        // CAPTCHA: back off hard, give up
-        if (e.code === 'CAPTCHA_DETECTED') {
-          this.limiter.recordThrottle(3, 'CAPTCHA');
-          throw e;
-        }
-        // Throttle signals
-        if (msg.includes('429') || msg.includes('too many') || msg.includes('rate limit')) {
-          this.limiter.recordThrottle(2, '429/rate-limit');
-        } else if (msg.includes('503') || msg.includes('unavailable') || msg.includes('timeout')) {
-          this.limiter.recordThrottle(1, '503/timeout');
-        } else {
-          this.limiter.recordError();
-        }
-
-        this.logger.warn({ stage: 'analyze', platform: 'doubao', attempt, maxRetries: this.maxRetries, err: e.message }, 'attempt failed');
-
-        if (attempt < this.maxRetries) {
-          const backoff = this.baseDelay * Math.pow(2, attempt - 1);
-          await new Promise(r => setTimeout(r, backoff));
-        }
-      }
-    }
-    throw new Error(`Doubao analysis failed after ${this.maxRetries} attempts: ${lastError?.message}`);
   }
 
   /**
    * Single attempt at analyzing a video.
-   *
-   * Round 8 改造:
-   *   - 用 selectors/doubao.json (配置化 selector + 备选链)
-   *   - 用 dom-watcher.mjs waitForElementTextStable (智能等待生成完成)
-   *   - 不用 30s 固定等待 + [data-e2e="stop-generating"] 硬编码
+   * SeniorDeveloper: 纯平台特有逻辑，retry 循环和解析由基类处理。
    */
   async _doAnalyze(video, attachments = []) {
     const page = await this.context.newPage();
@@ -131,12 +70,11 @@ export class DoubaoAnalyzer {
         const stable = await waitForElementTextStable(page, responseSelector, {
           pollIntervalMs: 8000,
           stableCount: 3,
-          maxWaitMs: 600000,  // 10 分钟
+          maxWaitMs: 600000,
           tailLength: 500
         });
         responseText = stable.text;
       } catch (e) {
-        // Fallback: 用 body innerText 末尾 (WorkBuddy batch_doubao_v5.mjs 同款)
         log?.warn?.({ err: e.message }, 'element-stable failed, falling back to body innerText tail');
         const bodyText = await waitForBodyTextStable(page, {
           pollIntervalMs: 8000,
@@ -157,13 +95,6 @@ export class DoubaoAnalyzer {
     }
   }
 
-  /**
-   * Build a skill-focused analysis prompt
-   * 
-   * This prompt treats the video as a LEARNABLE SKILL UNIT,
-   * not just content to summarize. It outputs actionable skill
-   * dimensions that can be combined into a learning roadmap.
-   */
   buildPrompt(video) {
     const videoTags = video.tags?.join(', ') || '无';
     const topComments = video.comments?.slice(0, 5).map(c =>
@@ -208,260 +139,5 @@ ${topComments}
 - 缺失信息填 "" 或 []
 - 不要使用 markdown 代码块包裹
 - 不要添加任何说明文字`;
-  }
-
-  parseResponse(video, rawText) {
-    // Phase A Task 8: try JSON first (more reliable), fall back to regex
-    const jsonParsed = this.tryParseJSON(rawText);
-    if (jsonParsed) {
-      return this.buildResultFromJSON(video, rawText, jsonParsed);
-    }
-    return this.buildResultFromRegex(video, rawText);
-  }
-
-  /**
-   * Attempt to extract a JSON object from the response text.
-   * Handles common LLM output patterns:
-   *  - Raw JSON: {"foo": "bar"}
-   *  - Markdown code block: ```json\n{...}\n```
-   *  - Preamble text + JSON: "Here is the result:\n{...}"
-   *  - Trailing explanation after JSON
-   *
-   * @param {string} text - Raw model output
-   * @returns {Object|null} Parsed object, or null if no valid JSON found
-   */
-  tryParseJSON(text) {
-    if (!text || typeof text !== 'string') return null;
-
-    // 1. Try direct parse
-    try {
-      const direct = JSON.parse(text.trim());
-      if (direct && typeof direct === 'object') return direct;
-    } catch { /* fall through */ }
-
-    // 2. Extract from markdown ```json ... ``` block
-    const codeBlock = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-    if (codeBlock) {
-      try {
-        const obj = JSON.parse(codeBlock[1]);
-        if (obj && typeof obj === 'object') return obj;
-      } catch { /* fall through */ }
-    }
-
-    // 3. Find first balanced {...} substring
-    const balanced = this.extractBalancedJSON(text);
-    if (balanced) {
-      try {
-        const obj = JSON.parse(balanced);
-        if (obj && typeof obj === 'object') return obj;
-      } catch { /* fall through */ }
-    }
-
-    return null;
-  }
-
-  /**
-   * Find the first balanced { ... } substring (respecting nested braces and strings).
-   * Used as a fallback when JSON is wrapped in prose.
-   */
-  extractBalancedJSON(text) {
-    const start = text.indexOf('{');
-    if (start === -1) return null;
-
-    let depth = 0;
-    let inString = false;
-    let escape = false;
-    for (let i = start; i < text.length; i++) {
-      const ch = text[i];
-      if (inString) {
-        if (escape) { escape = false; continue; }
-        if (ch === '\\') { escape = true; continue; }
-        if (ch === '"') inString = false;
-        continue;
-      }
-      if (ch === '"') { inString = true; continue; }
-      if (ch === '{') depth++;
-      else if (ch === '}') {
-        depth--;
-        if (depth === 0) return text.slice(start, i + 1);
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Build the final result object from a successfully-parsed JSON response.
-   */
-  buildResultFromJSON(video, rawText, parsed) {
-    const dimensions = {
-      skill_name: this.stringOrNull(parsed.skill_name),
-      skill_level: this.stringOrNull(parsed.skill_level),
-      key_points: this.arrayOrNull(parsed.key_points),
-      action_steps: this.arrayOrNull(parsed.action_steps),
-      tools_resources: this.arrayOrNull(parsed.tools_resources),
-      pitfalls: this.arrayOrNull(parsed.pitfalls),
-      use_cases: this.stringOrNull(parsed.use_cases),
-      prerequisites: this.stringOrNull(parsed.prerequisites),
-      learning_path: this.stringOrNull(parsed.learning_path),
-      auto_tags: this.normalizeTags(parsed.auto_tags),
-    };
-
-    // Warn if too many dimensions are null (likely partial parse)
-    const nullCount = Object.values(dimensions).filter(v => v === null || (Array.isArray(v) && v.length === 0)).length;
-    if (nullCount >= 7) {
-      this.logger.warn({ stage: 'analyze', platform: 'doubao', nullCount, total: 10 }, 'JSON parsed but dimensions incomplete');
-    }
-
-    return {
-      url: video.url,
-      title: video.title,
-      author: video.author,
-      tags: video.tags || [],
-      platform: 'douyin',
-      analyzer: 'doubao',
-      analysis: rawText,
-      dimensions,
-      parseMode: 'json',
-      timestamp: new Date().toISOString(),
-    };
-  }
-
-  /**
-   * Build result using the legacy regex-based extractor.
-   * Used when JSON parsing fails (model didn't follow JSON instructions).
-   */
-  buildResultFromRegex(video, rawText) {
-    const dimensions = {
-      skill_name:     this.extractDimension(rawText, 1, '技能名称'),
-      skill_level:    this.extractDimension(rawText, 2, '技能等级'),
-      key_points:     this.extractListDimension(rawText, 3, '核心要点'),
-      action_steps:   this.extractListDimension(rawText, 4, '实操步骤'),
-      tools_resources: this.extractListDimension(rawText, 5, '工具[/]?资源|工具|资源'),
-      pitfalls:       this.extractListDimension(rawText, 6, '避坑|陷阱|错误'),
-      use_cases:      this.extractDimension(rawText, 7, '适用场景'),
-      prerequisites:  this.extractDimension(rawText, 8, '前置知识|前置条件|前提'),
-      learning_path:  this.extractDimension(rawText, 9, '学习路径|组合学习'),
-      auto_tags:      this.extractTagsDimension(rawText, 10, '关键词标签|标签'),
-    };
-    return {
-      url: video.url,
-      title: video.title,
-      author: video.author,
-      tags: video.tags || [],
-      platform: 'douyin',
-      analyzer: 'doubao',
-      analysis: rawText,
-      dimensions,
-      parseMode: 'regex',
-      timestamp: new Date().toISOString(),
-    };
-  }
-
-  stringOrNull(v) {
-    if (v === null || v === undefined) return null;
-    const s = String(v).trim();
-    return s.length > 0 ? s : null;
-  }
-
-  arrayOrNull(v) {
-    if (!Array.isArray(v)) return null;
-    const cleaned = v
-      .map(x => String(x).trim())
-      .filter(x => x.length > 0);
-    return cleaned.length > 0 ? cleaned : null;
-  }
-
-  /**
-   * Normalize auto_tags: strip leading "#" if present, dedupe (case-insensitive).
-   * Keeps the first-seen casing.
-   */
-  normalizeTags(v) {
-    const arr = this.arrayOrNull(v);
-    if (!arr) return null;
-    const seen = new Set();
-    const normalized = [];
-    for (const raw of arr) {
-      const t = raw.replace(/^#+/, '').trim();
-      if (!t) continue;
-      const key = t.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      normalized.push(t);
-    }
-    return normalized.length > 0 ? normalized : null;
-  }
-
-  /**
-   * Extract a single-value dimension from numbered section.
-   * Handles formats: "1. 技能名称：XXX" or "**1. 技能名称** — XXX"
-   */
-  extractDimension(text, num, keyword) {
-    const kwGroup = keyword.includes('|') ? `(?:${keyword})` : keyword;
-    const patterns = [
-      new RegExp(`(?:\\*\\*)?${num}[\\.、](?:\\*\\*)?[\\s]*${kwGroup}[：:\\s—-]+([^\\n]+)`, 'i'),
-      new RegExp(`${kwGroup}[：:\\s]+([^\\n]+)`, 'i'),
-    ];
-    for (const p of patterns) {
-      const m = text.match(p);
-      if (m && m[1]) return m[1].trim();
-    }
-    return null;
-  }
-
-  /**
-   * Extract a list dimension (bullet points).
-   * Handles: "- item1\n- item2" or "1）item1\n2）item2"
-   */
-  extractListDimension(text, num, keyword) {
-    const kwGroup = keyword.includes('|') ? `(?:${keyword})` : keyword;
-    // Match header "N. keyword：" (stop at colon, don't eat newlines into the section)
-    const sectionPattern = new RegExp(
-      `(?:\\*\\*)?${num}[\\.、](?:\\*\\*)?\\s*${kwGroup}\\s*[:：]`, ''
-    );
-    const sectionMatch = text.match(sectionPattern);
-    if (!sectionMatch) return null;
-
-    const startIdx = sectionMatch.index + sectionMatch[0].length;
-    const nextSection = text.slice(startIdx).match(/\n\s*\d+[\.、]/);
-    const endIdx = nextSection ? startIdx + nextSection.index : text.length;
-    const block = text.slice(startIdx, endIdx);
-
-    const items = [];
-    // Process line-by-line to avoid greedy regex swallowing subsequent bullets
-    const lines = block.split('\n');
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-
-      // Match "- item" or "• item"
-      let m = trimmed.match(/^[-•]\s+(.+)$/);
-      if (m) { items.push(m[1].trim()); continue; }
-
-      // Match "Step N: item" or "步骤N：item"
-      m = trimmed.match(/^(?:Step|步骤)\s*\d+[：:]\s+(.+)$/i);
-      if (m) { items.push(m[1].trim()); continue; }
-
-      // Match "1) item" or "1） item" or "1] item"
-      m = trimmed.match(/^\d+[）)\]]\s+(.+)$/);
-      if (m) { items.push(m[1].trim()); continue; }
-    }
-
-    if (items.length === 0 && block.trim()) {
-      return block.trim().split(/[;；\n]/).map(s => s.trim()).filter(Boolean);
-    }
-    return items.length > 0 ? items : null;
-  }
-
-  /**
-   * Extract tags dimension.
-   */
-  extractTagsDimension(text, num, keyword) {
-    const raw = this.extractDimension(text, num, keyword);
-    if (!raw) return null;
-    const hashTags = raw.match(/#([^\s#,]+)/g);
-    if (hashTags && hashTags.length > 0) {
-      return hashTags.map(t => t.slice(1).trim());
-    }
-    return raw.split(/[,，、\s]+/).map(s => s.trim()).filter(s => s.length > 1);
   }
 }

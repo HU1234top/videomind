@@ -164,7 +164,8 @@ describe('KimiAnalyzer.buildResultFromJSON', () => {
       auto_tags: ['AI', '#AI', '编程', '#AI']  // duplicate
     };
     const result = analyzer.buildResultFromJSON(sampleVideo, '', parsed);
-    assert.deepEqual(result.dimensions.auto_tags, ['#AI', '#编程']);
+    // SeniorDeveloper: BaseAnalyzer.normalizeTags 统一去除 # 前缀（与 doubao 一致）
+    assert.deepEqual(result.dimensions.auto_tags, ['AI', '编程']);
   });
 
   test('null fields produce null', () => {
@@ -210,7 +211,7 @@ describe('KimiAnalyzer.buildResultFromRegex', () => {
     assert.match(result.dimensions.use_cases, /写作/);
     assert.match(result.dimensions.prerequisites, /无/);
     assert.match(result.dimensions.learning_path, /Claude/);
-    assert.deepEqual(result.dimensions.auto_tags, ['#AI', '#Kimi', '#效率']);
+    assert.deepEqual(result.dimensions.auto_tags, ['AI', 'Kimi', '效率']);
   });
 });
 
