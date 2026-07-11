@@ -99,16 +99,13 @@ async function collect(cfg) {
 }
 
 async function analyze(cfg) {
-  const { analyzer: analyzerName, mode, cdpPort, inputFile, outputFile, checkpointEnabled, checkpointDb } = cfg;
+  const { analyzer: analyzerName, fallback, mode, cdpPort, inputFile, outputFile, checkpointEnabled, checkpointDb } = cfg;
 
-  logger.info({ stage: 'analyze', analyzer: analyzerName, mode }, 'analysis starting');
+  logger.info({ stage: 'analyze', analyzer: analyzerName, fallback, mode }, 'analysis starting');
 
   // Checkpoint setup (Phase A Task 1 — resume on failure)
   const { Checkpoint, checkpointConfigFromArgs } = await import('./core/checkpoint.mjs');
-  // checkpointConfigFromArgs still operates on the raw argv; pass it the original
-  // CLI slice (args minus the command name) so existing behavior is preserved.
   const cpCfg = checkpointConfigFromArgs(args.slice(1));
-  // Override with validated values (single source of truth)
   cpCfg.enabled = checkpointEnabled;
   if (checkpointDb) cpCfg.dbPath = checkpointDb;
   const checkpoint = new Checkpoint(cpCfg);
@@ -121,7 +118,15 @@ async function analyze(cfg) {
     }
   }
 
-  const orchestrator = new Orchestrator({ cdpPort, mode, primaryAnalyzer: analyzerName, checkpoint });
+  // Round 9 改造: fallback chain 由 cfg 驱动，Router 自动 dedupe
+  const fallbackChain = [analyzerName, ...(fallback || []).filter(n => n !== analyzerName)];
+
+  const orchestrator = new Orchestrator({
+    cdpPort, mode,
+    primaryAnalyzer: analyzerName,
+    fallbackChain,
+    checkpoint
+  });
   await orchestrator.init();
 
   // Load video list
@@ -136,13 +141,9 @@ async function analyze(cfg) {
   const results = [];
   for (const video of videos) {
     try {
-      if (mode === 'sequential') {
-        const result = await orchestrator.analyzeSequential(video, analyzerName, ['doubao', 'kimi', 'gemini']);
-        results.push(result);
-      } else {
-        const result = await orchestrator.analyzeParallel(video, ['doubao', 'kimi', 'gemini']);
-        results.push(result);
-      }
+      // Round 9: Router 内部处理 chain + fallback，不传参数
+      const result = await orchestrator.analyzeSequential(video);
+      results.push(result);
       logger.info({ stage: 'analyze', url: video.url, title: video.title?.substring(0, 30) }, 'video analyzed');
     } catch (e) {
       logger.error({ stage: 'analyze', url: video.url, title: video.title?.substring(0, 30), err: e.message }, 'video analysis failed');
@@ -188,12 +189,12 @@ async function sync(cfg) {
   const kb = JSON.parse(fs.readFileSync(inputFile, 'utf8'));
 
   if (sinkName === 'markdown') {
-    const sink = new MarkdownSink();
+    const sink = new MarkdownSink(outputDir ? { outputDir } : {});
     const result = await sink.sink(kb);
     logger.info({ stage: 'sync', sink: 'markdown', files: result.filesWritten, dir: result.outputDir }, 'sink complete');
   } else if (sinkName === 'obsidian') {
     const { ObsidianSink } = await import('./sinks/obsidian.mjs');
-    const sink = new ObsidianSink();
+    const sink = new ObsidianSink(outputDir ? { outputDir } : {});
     const result = await sink.sink(kb);
     logger.info({ stage: 'sync', sink: 'obsidian', files: result.filesWritten, videos: result.videos, categories: result.categories, dir: result.outputDir }, 'sink complete');
   } else {

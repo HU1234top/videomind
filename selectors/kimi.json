@@ -1,0 +1,65 @@
+{
+  "version": "1.0.0",
+  "platform": "kimi",
+  "implemented": true,
+  "lastVerified": "2026-07-10",
+  "verifiedOn": "Edge 150 via CDP 9222",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0",
+  "notes": [
+    "Kimi 网页版无需登录, 主页直接 chat",
+    "真实域名是 https://www.kimi.com/ (kimi.ai 会自动跳转)",
+    "chat input 是 contenteditable div, 不能用 textarea 语义",
+    "发送按钮在 chat-editor-action 容器内, 输入文本后激活",
+    "未登录时 class 含 'not-login-avatar-svg' / 'user-info-container'",
+    "截图: research/snapshots/kimi-01-home.png / kimi-06-after-input.png"
+  ],
+  "selectors": {
+    "chatInput": {
+      "primary": "div.chat-input-editor[contenteditable='true']",
+      "fallback": [
+        "[data-lexical-editor='true']",
+        "div[contenteditable='true'][role='textbox']"
+      ],
+      "stability": "high",
+      "description": "Kimi 主页 chat 输入框 (contenteditable div, lexical editor)"
+    },
+    "sendButton": {
+      "primary": ".send-button-container",
+      "fallback": [
+        ".chat-editor-action .send-button-container",
+        ".chat-editor-action .send-icon",
+        ".chat-editor-action [class*='send' i]:not(.send-button-svg)"
+      ],
+      "stability": "high",
+      "description": "发送按钮是 div.send-button-container (不是 button), 内含 svg.send-icon。Round 10 E2E fix."
+    },
+    "responseContainer": {
+      "primary": ".message-list",
+      "fallback": [
+        ".message-list-container",
+        "[class*='message-list']",
+        "[class*='chat-message']"
+      ],
+      "stability": "medium",
+      "description": "对话消息列表容器, AI 回复会在此出现"
+    },
+    "userLoggedInAvatar": {
+      "primary": ".user-info-container",
+      "fallback": [
+        "[class*='avatar']:not(.not-login-avatar-svg)",
+        "img[alt*='avatar' i]:not(.not-login-avatar-svg)"
+      ],
+      "stability": "medium",
+      "description": "已登录用户的头像 (有别于 not-login-avatar-svg 未登录图标)"
+    },
+    "loginButton": {
+      "primary": ".user-info-container .not-login-icon",
+      "fallback": [
+        "[class*='not-login']",
+        "button[aria-label*='登录' i]"
+      ],
+      "stability": "medium",
+      "description": "未登录指示器 (Kimi 实际不强制登录, 仅用于探测)"
+    }
+  }
+}

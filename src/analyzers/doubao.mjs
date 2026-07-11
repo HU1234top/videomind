@@ -3,6 +3,11 @@
  *
  * MVP validated: 77/76 videos = 100% coverage (49 deep + 28 enhanced basic)
  *
+ * Round 8 改造 (Phase B 第一项):
+ *   - 改用 selectors/doubao.json (配置化 selector + 备选链)
+ *   - 改用 dom-watcher.mjs 智能等待 (替代硬编码 30s)
+ *   - 不再依赖 [data-e2e="stop-generating"] (WorkBuddy 验证: 该属性不稳定)
+ *
  * Key innovation: Skill-focused 10-dimension framework
  * Unlike generic "summary + tags" approaches, this treats each video
  * as a learnable SKILL UNIT and outputs: what to learn → how to learn
@@ -11,6 +16,8 @@
 
 import { getLimiter } from '../core/rate-limiter.mjs';
 import { createLogger } from '../core/logger.mjs';
+import { loadSelectors, waitForElement, captureFailure } from '../core/selector.mjs';
+import { waitForBodyTextStable, waitForElementTextStable } from '../core/dom-watcher.mjs';
 
 export class DoubaoAnalyzer {
   constructor(context, options = {}) {
@@ -20,6 +27,9 @@ export class DoubaoAnalyzer {
     this.baseDelay = 2000;
     this.limiter = getLimiter('doubao');
     this.logger = options.logger || createLogger({ base: { component: 'analyzer', platform: 'doubao' } });
+    const config = loadSelectors('doubao');
+    this.config = config;
+    this.selectors = config.selectors;
   }
 
   /**
@@ -70,39 +80,78 @@ export class DoubaoAnalyzer {
 
   /**
    * Single attempt at analyzing a video.
+   *
+   * Round 8 改造:
+   *   - 用 selectors/doubao.json (配置化 selector + 备选链)
+   *   - 用 dom-watcher.mjs waitForElementTextStable (智能等待生成完成)
+   *   - 不用 30s 固定等待 + [data-e2e="stop-generating"] 硬编码
    */
   async _doAnalyze(video, attachments = []) {
     const page = await this.context.newPage();
+    const log = this.logger;
     try {
-      await page.goto(this.url);
-      await page.waitForLoadState('networkidle');
+      await page.goto(this.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-      // Navigate to new conversation
-      await page.click('[data-e2e="new-conversation"]').catch(() => {});
-      await page.waitForTimeout(1000);
+      // 等输入框出现 (替代硬编码 selector)
+      const inputResult = await waitForElement(page, this.selectors.chatInput, {
+        intervals: [3000, 5000],
+        scrollTrigger: false,
+        logger: log
+      });
+      if (!inputResult.element) {
+        log?.error?.({ attempts: inputResult.attempts }, 'chat input not found');
+        await captureFailure(page, 'no-chat-input', { logger: log });
+        throw new Error('chat input not found — selectors/doubao.json may be outdated');
+      }
 
-      // Construct skill-focused analysis prompt
+      // 构造 prompt + 输入
       const prompt = this.buildPrompt(video);
+      await inputResult.element.fill(prompt);
+      await new Promise(r => setTimeout(r, 500));
 
-      // Input prompt into Doubao's chat interface
-      const inputBox = await page.locator('.chat-input, textarea, [data-e2e="chat-input"]').first();
-      await inputBox.fill(prompt);
-      await inputBox.press('Enter');
+      // 尝试找发送按钮，fallback 按 Enter
+      const sendResult = await waitForElement(page, this.selectors.sendButton, {
+        intervals: [1000, 2000],
+        scrollTrigger: false,
+        logger: log
+      });
+      if (sendResult.element) {
+        await sendResult.element.click();
+      } else {
+        log?.warn?.({ prompt: prompt.slice(0, 50) }, 'no send button, pressing Enter');
+        await inputResult.element.press('Enter');
+      }
 
-      // Wait for Doubao to finish generating
-      await page.waitForTimeout(30000); // 30s for generation
-
-      // Try to detect completion
-      const stopBtn = page.locator('[data-e2e="stop-generating"]');
+      // 智能等待: AI 回复元素文本连续 3 次 (24s) 稳定
+      const responseSelector = this.selectors.responseContainer.primary;
+      log?.debug?.({ selector: responseSelector }, 'waiting for AI response to stabilize');
+      const t0 = Date.now();
+      let responseText;
       try {
-        await stopBtn.waitFor({ state: 'hidden', timeout: 60000 });
-      } catch { /* generation may already be complete */ }
+        const stable = await waitForElementTextStable(page, responseSelector, {
+          pollIntervalMs: 8000,
+          stableCount: 3,
+          maxWaitMs: 600000,  // 10 分钟
+          tailLength: 500
+        });
+        responseText = stable.text;
+      } catch (e) {
+        // Fallback: 用 body innerText 末尾 (WorkBuddy batch_doubao_v5.mjs 同款)
+        log?.warn?.({ err: e.message }, 'element-stable failed, falling back to body innerText tail');
+        const bodyText = await waitForBodyTextStable(page, {
+          pollIntervalMs: 8000,
+          stableCount: 3,
+          maxWaitMs: 600000
+        });
+        responseText = bodyText;
+      }
+      log?.info?.({ took: Date.now() - t0, len: responseText.length }, 'AI response captured');
 
-      // Extract the response text
-      const response = await page.locator('.assistant-message, .ai-response').last().textContent();
-
-      // Parse into structured 10-dimension format
-      return this.parseResponse(video, response);
+      return this.parseResponse(video, responseText);
+    } catch (e) {
+      log?.error?.({ err: e.message, video: video.url }, '_doAnalyze failed');
+      await captureFailure(page, 'analyze-failed', { logger: log });
+      throw e;
     } finally {
       await page.close();
     }

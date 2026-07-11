@@ -227,6 +227,7 @@ describe('Doubao JSON parser — buildPrompt updates', () => {
     const prompt = analyzer.buildPrompt(baseVideo);
     assert.ok(prompt.includes('JSON'), 'prompt should mention JSON');
     assert.ok(prompt.includes('skill_name'), 'prompt should specify JSON schema fields');
+    assert.ok(prompt.includes('"严格 JSON"') || prompt.includes('仅'), 'prompt should demand JSON-only output');
     assert.ok(prompt.includes('不要使用 markdown 代码块包裹') || prompt.includes('不'), 'prompt should forbid markdown wrapping');
   });
 

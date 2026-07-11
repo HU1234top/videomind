@@ -1,0 +1,65 @@
+{
+  "version": "2026-07-10",
+  "lastVerified": "2026-07-10",
+  "platform": "doubao",
+  "verifiedOn": "咕咕鸟的豆包账号 (via WorkBuddy test_doubao.mjs)",
+  "userAgent": "Edg/150.0.4078.48",
+  "notes": [
+    "豆包 PC web 没有 data-e2e 属性 (只有 semi-input 等通用 class)。",
+    "基于 WorkBuddy 2026-07-08 test_doubao.mjs / test_doubao_video.mjs 验证。",
+    "CSS class 'semi-*' 是字节前端 UI 库 semi-ui 的命名空间。",
+    "dom-watcher 用 document.body.innerText 监听响应完成 (不依赖 stop button selector)。"
+  ],
+  "selectors": {
+    "chatInput": {
+      "primary": "textarea[placeholder='发消息...']",
+      "fallback": [
+        "textarea.semi-input-textarea",
+        "textarea",
+        "[contenteditable='true']",
+        "[role='textbox']"
+      ],
+      "stability": "high",
+      "description": "聊天输入框"
+    },
+    "sendButton": {
+      "primary": "button[class*='send']",
+      "fallback": [
+        "[class*='sendBtn']",
+        "[data-testid*='send']",
+        "[aria-label*='发送']"
+      ],
+      "stability": "medium",
+      "description": "发送按钮 (找不到时 fallback 按 Enter)"
+    },
+    "responseContainer": {
+      "primary": "[class*='markdown']:last-of-type",
+      "fallback": [
+        "[class*='message']",
+        "[class*='chat-content']",
+        "[class*='answer']",
+        "[class*='response']"
+      ],
+      "stability": "medium",
+      "description": "AI 回复容器 (取最后一个 = 最新回复)"
+    },
+    "userLoggedInAvatar": {
+      "primary": "[class*='avatar']",
+      "fallback": [
+        "[class*='user-info']",
+        "[class*='userInfo']"
+      ],
+      "stability": "high",
+      "description": "登录态检测 (有头像 = 已登录)"
+    },
+    "loginButton": {
+      "primary": "text=登录",
+      "fallback": [
+        "text=扫码登录",
+        "text=登 录"
+      ],
+      "stability": "high",
+      "description": "未登录时的登录按钮 (用于扫码登录触发)"
+    }
+  }
+}

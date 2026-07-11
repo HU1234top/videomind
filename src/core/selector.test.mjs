@@ -143,3 +143,52 @@ describe('integration: load real douyin selectors', () => {
     );
   });
 });
+
+describe('integration: load real doubao selectors (Round 8)', () => {
+  test('all selectors in doubao.json are parseable', () => {
+    const cfg = loadSelectors('doubao');
+    for (const [name, sel] of Object.entries(cfg.selectors)) {
+      assert.ok(sel.primary, `${name} should have primary`);
+      const chain = selectorChain(sel);
+      assert.ok(chain.length > 0, `${name} should have at least primary`);
+    }
+  });
+
+  test('doubao.json uses WorkBuddy-verified selectors', () => {
+    const cfg = loadSelectors('doubao');
+    // 来自 test_doubao_video.mjs 第 43 行 (已验证)
+    assert.equal(
+      cfg.selectors.chatInput.primary,
+      "textarea[placeholder='发消息...']",
+      'chatInput should use placeholder selector (verified in WorkBuddy 2026-07-08)'
+    );
+    // sendButton primary 是 button[class*='send'] (WorkBuddy test_doubao_video.mjs 第 66 行)
+    assert.match(
+      cfg.selectors.sendButton.primary,
+      /button\[class\*=['"]send['"]\]/,
+      'sendButton primary should use class*=send'
+    );
+    // 来自 test_doubao_video.mjs 第 66-69 行 (备选链)
+    assert.ok(
+      cfg.selectors.sendButton.fallback.some(s => /sendBtn/.test(s)),
+      'sendButton fallback should include sendBtn'
+    );
+    assert.ok(
+      cfg.selectors.sendButton.fallback.some(s => /aria-label.*发送/.test(s)),
+      'sendButton fallback should include aria-label 发送'
+    );
+  });
+
+  test('doubao.json response selector targets last AI message', () => {
+    const cfg = loadSelectors('doubao');
+    // 来自 test_doubao_video.mjs 第 86 行: 多个 class 通配, 取最后一个
+    const allRespSelectors = [
+      cfg.selectors.responseContainer.primary,
+      ...cfg.selectors.responseContainer.fallback
+    ];
+    const combined = allRespSelectors.join(' ');
+    assert.match(combined, /\[class\*=['"]message['"]\]/);
+    assert.match(combined, /\[class\*=['"]markdown['"]\]/);
+    assert.match(combined, /\[class\*=['"]answer['"]\]/);
+  });
+});

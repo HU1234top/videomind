@@ -1,24 +1,40 @@
 /**
  * VideoMind Orchestrator — Task planning, routing, and coordination
+ *
+ * Round 9 改造:
+ *   - 引入 AnalyzerRouter 替代 analyzeSequential 内的内联 fallback 循环
+ *   - Router 统一处理 UNAVAILABLE / NOT_LOGGED_IN / CAPTCHA 错误分类
+ *   - checkpoint 集成：Router 自己 markCompleted/markFailed
  */
 
 import { WebAgent, AnalyzerFactory } from '../core/web-agent.mjs';
+import { AnalyzerRouter } from './analyzer-router.mjs';
 import { SUPPORTED_ANALYZERS } from '../core/schema.mjs';
 import { createLogger } from './logger.mjs';
 
 export class Orchestrator {
   constructor(options = {}) {
-    this.agent = new WebAgent({ cdpPort: options.cdpPort || 9222 });
+    this.agent = new WebAgent({ cdpPort: options.cdpPort || 9222, logger: options.logger });
     this.mode = options.mode || 'sequential';  // 'sequential' or 'parallel'
     this.primaryAnalyzer = options.primaryAnalyzer || 'doubao';
     this.fallbackChain = options.fallbackChain || ['doubao', 'kimi', 'gemini', 'claude'];
     // Optional checkpoint for resume-on-failure (Phase A Task 1)
     this.checkpoint = options.checkpoint || null;
     this.logger = options.logger || createLogger({ base: { component: 'orchestrator' } });
+    this.router = null;  // lazy in init()
   }
 
   async init() {
     await this.agent.connect();
+    // 初始化 Router（构造 + 注入）
+    this.router = new AnalyzerRouter({
+      registry: AnalyzerFactory.all(),
+      primary: this.primaryAnalyzer,
+      fallback: this.fallbackChain,
+      context: this.agent.context,
+      logger: this.logger,
+      checkpoint: this.checkpoint
+    });
     return this;
   }
 
@@ -40,46 +56,14 @@ export class Orchestrator {
   /**
    * Sequential mode: primary AI does deep analysis, fallback on failure.
    *
-   * Checkpoint integration (Phase A Task 1):
-   * - Skip videos already completed (return cached result)
-   * - Record in_progress / completed / failed transitions
+   * Round 9 改造: 委托给 AnalyzerRouter 处理错误分类 + chain 遍历。
+   * 保留 checkpoint "isCompleted → 返回缓存" 的语义。
    */
-  async analyzeSequential(video, primaryAnalyzer, fallbackChain) {
-    // Resume: skip if checkpoint says already done
-    if (this.checkpoint && this.checkpoint.isCompleted(video.url)) {
-      const cached = this.checkpoint.getCachedResult(video.url);
-      if (cached) {
-        this.logger.info({ stage: 'analyze', url: video.url, title: video.title?.substring(0, 30) }, 'skipped (cached)');
-        return cached;
-      }
+  async analyzeSequential(video /* primary, fallback 都被 router 持有 */) {
+    if (!this.router) {
+      throw new Error('Orchestrator: init() must be called before analyzeSequential');
     }
-
-    for (const analyzer of fallbackChain) {
-      // Mark in_progress (increments attempts, gates max retries)
-      if (this.checkpoint) {
-        const accepted = this.checkpoint.markInProgress(video.url);
-        if (!accepted) {
-          this.logger.warn({ stage: 'analyze', url: video.url, title: video.title }, 'max retries exceeded, skipping');
-          throw new Error(`Max retries exceeded for video: ${video.title}`);
-        }
-      }
-
-      try {
-        const result = await this.agent.sendToAI(analyzer, video);
-        if (result && result.analysis) {
-          if (this.checkpoint) this.checkpoint.markCompleted(video.url, result);
-          this.logger.info({ stage: 'analyze', url: video.url, analyzer, title: video.title?.substring(0, 30) }, 'analyzed');
-          return result;
-        }
-      } catch (e) {
-        this.logger.warn({ stage: 'analyze', url: video.url, analyzer, err: e.message, title: video.title?.substring(0, 30) }, 'analyzer failed, trying next');
-        continue;
-      }
-    }
-
-    if (this.checkpoint) this.checkpoint.markFailed(video.url, 'all analyzers failed');
-    this.logger.error({ stage: 'analyze', url: video.url, title: video.title }, 'all analyzers failed');
-    throw new Error(`All analyzers failed for video: ${video.title}`);
+    return this.router.route(video);
   }
 
   /**
@@ -89,7 +73,7 @@ export class Orchestrator {
     const results = await Promise.allSettled(
       analyzers.map(a => this.agent.sendToAI(a, video))
     );
-    
+
     const successful = results
       .filter(r => r.status === 'fulfilled' && r.value?.analysis)
       .map(r => r.value);
