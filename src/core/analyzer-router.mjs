@@ -18,6 +18,7 @@
  */
 
 import { createLogger } from './logger.mjs';
+import { arbitrate } from './consensus.mjs';
 import {
   AnalyzerUnavailableError,
   NotLoggedInError,
@@ -170,5 +171,75 @@ export class AnalyzerRouter {
    */
   static classify(err) {
     return classify(err);
+  }
+
+  /**
+   * Round 18 / L1 — 并行共识仲裁路由.
+   *
+   * 跟 route() 不同: 同时跑 chain 里所有 analyzer, 字段级投票合并.
+   *
+   * @param {Object} video
+   * @param {Array} [attachments=[]]
+   * @returns {Promise<Object>} { result, consensus } (consensus 来自 arbitrate)
+   *
+   * 行为:
+   *   - 全部 ≥2 个 analyzer 成功 → arbitrate()
+   *   - 只有 1 个成功 → wrap single-result (mode='single-result')
+   *   - 全部失败 → AnalyzerUnreachableError
+   *
+   * 失败处理:
+   *   - NotLoggedInError / UNAVAILABLE 该 analyzer 视为"无响应", 仍进入 consensus.failed
+   *   - CAPTCHA 等致命 → abort 全 chain
+   */
+  async routeConsensus(video, attachments = []) {
+    if (!video?.url) throw new Error('AnalyzerRouter.routeConsensus: video.url is required');
+
+    const responses = [];
+    let abortErr = null;
+
+    for (const name of this._chain) {
+      const AnalyzerClass = this.registry[name];
+      if (!AnalyzerClass) {
+        responses.push({ analyzer: name, result: null, error: new Error('not registered') });
+        continue;
+      }
+
+      let analyzer;
+      try {
+        analyzer = new AnalyzerClass(this.context, {
+          logger: this.logger.child?.({ analyzer: name, mode: 'consensus' }) || this.logger
+        });
+        const result = await analyzer.analyze(video, attachments);
+        if (result && result.analysis) {
+          responses.push({ analyzer: name, result });
+          this.logger.info?.({ stage: 'routeConsensus', url: video.url, analyzer: name }, 'analyzed');
+        } else {
+          responses.push({ analyzer: name, result: null, error: new Error('empty result') });
+        }
+      } catch (err) {
+        const cls = classify(err);
+        this.logger.warn?.({ stage: 'routeConsensus', url: video.url, analyzer: name, code: err?.code, action: cls.action }, 'analyzer failed');
+        responses.push({ analyzer: name, result: null, error: err });
+
+        if (cls.action === 'abort') {
+          abortErr = err;
+          break;
+        }
+        // skip / fallback → 继续跑下一个
+      }
+    }
+
+    if (abortErr) throw abortErr;
+
+    // checkpoint 缓存 (consensus 的最终 result)
+    const arbitrated = arbitrate(responses, { primary: this._chain[0] });
+    if (this.checkpoint?.markCompleted) {
+      this.checkpoint.markCompleted(video.url, arbitrated.result);
+    }
+    this.logger.info?.(
+      { stage: 'routeConsensus', url: video.url, confidence: arbitrated.consensus.confidence, mode: arbitrated.consensus.mode },
+      'consensus complete'
+    );
+    return arbitrated;
   }
 }

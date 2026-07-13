@@ -252,7 +252,7 @@ LOG_LEVEL=silent node src/cli.mjs analyze
 | 模块 | 平台/工具 | 验证场景 |
 |------|----------|----------|
 | Collector | 🇨🇳 抖音 + 🎬 B 站 | 抖音收藏夹批量抓取（76 视频实测）；B 站 CC 字幕自动摄入 |
-| Analyzer | 🧠 多 AI 路由 | 豆包 + Kimi 真实实现；Gemini/Claude 走同套路由框架 |
+| Analyzer | 🧠 双 AI 路由 + 共识仲裁 | 豆包 + Kimi 真实实现；AnalyzerRouter 提供 sequential + consensus 双模式（consensus 字段级投票，置信度 + 冲突明细） |
 | Builder | KnowledgeBuilder | 8 类自动分类（防漏兜底）+ Levenshtein 去重（阈值 0.6） |
 | Sink | Markdown / Obsidian / 🟪 乐享 / Notion | Markdown 含 frontmatter + wikilinks；Obsidian 含 Vault 结构；乐享走 WorkBuddy MCP |
 | Checkpoint | SQLite | 断点续传：跑 76 视频中途崩了下次自动从断点继续（Phase A Task 1） |
@@ -265,7 +265,7 @@ LOG_LEVEL=silent node src/cli.mjs analyze
 |------|------|
 | Collector 评论抓取 | 已用，分析阶段再补一次保证覆盖 |
 | Obsidian Dataview 查询 | 生成 Dataview 友好的 frontmatter |
-| 并行模式 + 共识仲裁 | Phase B 路由框架已搭好（主备 fallback），多 AI 共识仲裁上线中 |
+| 并行模式 + 共识仲裁 | AnalyzerRouter.routeConsensus 同跑多 AI，字段级投票合并，标 confidence + conflicts（Round 18 L1） |
 
 ### 🔮 下一阶段重点（**Phase B 推进**）
 
