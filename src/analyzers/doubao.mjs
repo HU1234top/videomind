@@ -175,11 +175,12 @@ ${topComments}
 
 请**仅**以一个合法的 JSON 对象回复，不要包含任何其他文字、Markdown 代码块标记或解释。格式如下：
 
-{"skill_name":"...","skill_level":"入门|中级|高级|专家","key_points":["...", "..."],"action_steps":["...", "..."],"tools_resources":["...", "..."],"pitfalls":["...", "..."],"use_cases":"...","prerequisites":"...","learning_path":"...","auto_tags":["#tag1", "#tag2"]}
+{"skill_name":"...","skill_level":"入门|中级|高级|专家","key_points":["...", "..."],"action_steps":["...", "..."],"tools_resources":["...", "..."],"pitfalls":["...", "..."],"use_cases":"...","prerequisites":"...","learning_path":"...","transcript":"...","auto_tags":["#tag1", "#tag2"]}
 
 - 字符串值用中文
 - 数组值用 ["项1", "项2"] 格式
 - 缺失信息填 "" 或 []
+- **transcript 字段：把视频里所有听得到的口语逐字记录下来**（原话+关键旁白），如听不清可填"(听不清)"，但尽量用连贯的文段还原。如果视频里没有口头讲解，标"无旁白"
 - 不要使用 markdown 代码块包裹
 - 不要添加任何说明文字`;
   }

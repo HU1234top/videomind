@@ -187,6 +187,8 @@ export class BaseAnalyzer {
       prerequisites: this.stringOrNull(parsed.prerequisites),
       learning_path: this.stringOrNull(parsed.learning_path),
       auto_tags: this.normalizeTags(parsed.auto_tags),
+      // M1: Round 17 — 结构化 transcript (豆包/Kimi/Claude 显式输出视频里的口语逐字)
+      transcript: this.stringOrNull(parsed.transcript),
     };
 
     const nullCount = Object.values(dimensions).filter(v => v === null || (Array.isArray(v) && v.length === 0)).length;
@@ -220,6 +222,8 @@ export class BaseAnalyzer {
       prerequisites:  this.extractDimension(rawText, 8, '前置知识|前置条件|前提'),
       learning_path:  this.extractDimension(rawText, 9, '学习路径|组合学习'),
       auto_tags:      this.extractTagsDimension(rawText, 10, '关键词标签|标签'),
+      // M1: transcript 字段, AI 漏 JSON 时 regex 兜底抓 'transcript|语音转写|逐字记录'
+      transcript:     this.extractTranscript(rawText),
     };
     return {
       url: video.url,
@@ -263,6 +267,28 @@ export class BaseAnalyzer {
       normalized.push(t);
     }
     return normalized.length > 0 ? normalized : null;
+  }
+
+  // ─── M1 transcript extraction (Round 17) ─────────────────
+  /**
+   * Regex-based 提取 transcript 字段.
+   * AI 漏 JSON 时的兜底: 抓 'transcript|语音转写|逐字记录' 后面的内容到下一个字段或段尾。
+   *
+   * Returns string|null. null 表示 rawText 里无 transcript 信号。
+   */
+  extractTranscript(rawText) {
+    if (!rawText || typeof rawText !== 'string') return null;
+
+    // 模式 1: "transcript": "..." JSON 风格
+    const jsonField = rawText.match(/["']?transcript["']?\s*[:：]\s*["']([^"'\n]{10,3000})["']/);
+    if (jsonField) return jsonField[1].trim();
+
+    // 模式 2: ## 语音转写 / 语音转写: / Transcript / 逐字记录 字面行
+    // 容忍 ## markdown heading 前缀, 终止于下一个 # heading 或数字列表
+    const lineMatch = rawText.match(/(?:^|\n)\s*#*\s*(?:语音转写|transcript|Transcript|逐字记录|视频脚本|原话)\s*[:：]?\s*\n+([\s\S]{20,3000}?)(?=\n\s*#+\s|\n\s*\d+\.\s|$)/i);
+    if (lineMatch) return lineMatch[1].trim();
+
+    return null;
   }
 
   // ─── Regex extraction helpers ──────────────────────────────
