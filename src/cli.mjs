@@ -141,10 +141,33 @@ async function analyze(cfg) {
   const results = [];
   for (const video of videos) {
     try {
-      // Round 9: Router 内部处理 chain + fallback，不传参数
-      const result = await orchestrator.analyzeSequential(video);
-      results.push(result);
-      logger.info({ stage: 'analyze', url: video.url, title: video.title?.substring(0, 30) }, 'video analyzed');
+      // Round 20: --mode consensus → 同跑多 AI + arbitrate 字段级投票
+      //          --mode sequential (默认) → 主备 fallback 链
+      if (mode === 'consensus') {
+        const arbitrated = await orchestrator.analyzeConsensus(video);
+        // 把 consensus 元数据 attach 到 result 上 → Markdown sink 渲染 frontmatter
+        const resultWithConsensus = {
+          ...arbitrated.result,
+          consensus: arbitrated.consensus,
+        };
+        if (checkpoint.enabled && arbitrated.result) {
+          checkpoint.markCompleted(video.url, resultWithConsensus);
+        }
+        results.push(resultWithConsensus);
+        logger.info({
+          stage: 'analyze',
+          url: video.url,
+          title: video.title?.substring(0, 30),
+          confidence: arbitrated.consensus.confidence,
+          conflicts: arbitrated.consensus.conflicts.length,
+          mode: arbitrated.consensus.mode
+        }, 'video analyzed (consensus)');
+      } else {
+        // Round 9: Router 内部处理 chain + fallback，不传参数
+        const result = await orchestrator.analyzeSequential(video);
+        results.push(result);
+        logger.info({ stage: 'analyze', url: video.url, title: video.title?.substring(0, 30) }, 'video analyzed');
+      }
     } catch (e) {
       logger.error({ stage: 'analyze', url: video.url, title: video.title?.substring(0, 30), err: e.message }, 'video analysis failed');
     }

@@ -309,8 +309,8 @@ test('SUPPORTED_SINKS includes markdown/lexiang/obsidian/notion', () => {
   assert.deepEqual(SUPPORTED_SINKS, ['markdown', 'lexiang', 'obsidian', 'notion']);
 });
 
-test('SUPPORTED_MODES includes sequential/parallel', () => {
-  assert.deepEqual(SUPPORTED_MODES, ['sequential', 'parallel']);
+test('SUPPORTED_MODES includes sequential/parallel/consensus', () => {
+  assert.deepEqual(SUPPORTED_MODES, ['sequential', 'parallel', 'consensus']);
 });
 
 /* ============================================================

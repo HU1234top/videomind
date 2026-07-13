@@ -67,7 +67,23 @@ export class Orchestrator {
   }
 
   /**
+   * Round 20 / Round 18 — Consensus mode.
+   *
+   * 同跑 chain 里所有 analyzer, 字段级投票合并.
+   * 返回 { result, consensus }, 让 CLI 把 consensus 挂到 result 上传给 sink.
+   */
+  async analyzeConsensus(video) {
+    if (!this.router) {
+      throw new Error('Orchestrator: init() must be called before analyzeConsensus');
+    }
+    return this.router.routeConsensus(video);
+  }
+
+  /**
    * Parallel mode: multiple AI analyze simultaneously, consensus arbitration
+   *
+   * @deprecated Round 18 起, 用 analyzeConsensus() 走 AnalyzerRouter.routeConsensus.
+   *             这里保留给向后兼容 — 但 CLI 已经切到 router 路径.
    */
   async analyzeParallel(video, analyzers) {
     const results = await Promise.allSettled(

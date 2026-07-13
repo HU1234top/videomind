@@ -23,7 +23,7 @@ import { z } from 'zod';
 export const SUPPORTED_PLATFORMS = ['douyin', 'bilibili', 'youtube', 'xiaohongshu'];
 export const SUPPORTED_ANALYZERS = ['doubao', 'kimi'];
 export const SUPPORTED_SINKS = ['markdown', 'lexiang', 'obsidian', 'notion'];
-export const SUPPORTED_MODES = ['sequential', 'parallel'];
+export const SUPPORTED_MODES = ['sequential', 'parallel', 'consensus'];
 
 /* ============================================================
  * .env loader (no dotenv dep — we keep it minimal)
