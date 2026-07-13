@@ -14,8 +14,6 @@
 import { createLogger } from './logger.mjs';
 import { DoubaoAnalyzer } from '../analyzers/doubao.mjs';
 import { KimiAnalyzer } from '../analyzers/kimi.mjs';
-import { GeminiAnalyzer } from '../analyzers/gemini.mjs';
-import { ClaudeAnalyzer } from '../analyzers/claude.mjs';
 
 export class WebAgent {
   constructor(options = {}) {
@@ -72,8 +70,6 @@ export class WebAgent {
 const ANALYZER_REGISTRY = {
   doubao: DoubaoAnalyzer,
   kimi: KimiAnalyzer,
-  gemini: GeminiAnalyzer,
-  claude: ClaudeAnalyzer,
 };
 
 export class AnalyzerFactory {

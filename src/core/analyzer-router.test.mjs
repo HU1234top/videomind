@@ -67,18 +67,18 @@ describe('AnalyzerRouter — construction', () => {
     const router = new AnalyzerRouter({
       registry: {},
       primary: 'doubao',
-      fallback: ['doubao', 'kimi', 'kimi', 'gemini']
+      fallback: ['doubao', 'kimi', 'kimi']
     });
-    assert.deepEqual(router.chain, ['doubao', 'kimi', 'gemini']);
+    assert.deepEqual(router.chain, ['doubao', 'kimi']);
   });
 
   test('chain getter excludes primary from fallback', () => {
     const router = new AnalyzerRouter({
       registry: {},
       primary: 'doubao',
-      fallback: ['kimi', 'gemini']
+      fallback: ['kimi']
     });
-    assert.deepEqual(router.chain, ['doubao', 'kimi', 'gemini']);
+    assert.deepEqual(router.chain, ['doubao', 'kimi']);
   });
 
   test('chain getter works without fallback', () => {
@@ -186,13 +186,11 @@ describe('AnalyzerRouter.route — all fail', () => {
     doubaoStub.prototype.analyze = async () => { throw new AnalyzerUnavailableError('doubao', 'x'); };
     const kimiStub = makeStub({ name: 'kimi', behavior: 'unavailable' });
     kimiStub.prototype.analyze = async () => { throw new AnalyzerUnavailableError('kimi', 'x'); };
-    const geminiStub = makeStub({ name: 'gemini', behavior: 'unavailable' });
-    geminiStub.prototype.analyze = async () => { throw new AnalyzerUnavailableError('gemini', 'x'); };
 
     const router = new AnalyzerRouter({
-      registry: { doubao: doubaoStub, kimi: kimiStub, gemini: geminiStub },
+      registry: { doubao: doubaoStub, kimi: kimiStub },
       primary: 'doubao',
-      fallback: ['kimi', 'gemini']
+      fallback: ['kimi']
     });
 
     try {
@@ -201,10 +199,9 @@ describe('AnalyzerRouter.route — all fail', () => {
     } catch (e) {
       assert.ok(e instanceof AnalyzerUnreachableError);
       assert.equal(e.code, 'UNREACHABLE');
-      assert.equal(e.attempts.length, 3);
+      assert.equal(e.attempts.length, 2);
       assert.equal(e.attempts[0].name, 'doubao');
       assert.equal(e.attempts[1].name, 'kimi');
-      assert.equal(e.attempts[2].name, 'gemini');
     }
   });
 });
