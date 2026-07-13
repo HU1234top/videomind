@@ -53,11 +53,10 @@
 | 豆包 AI 深度分析 | **77 / 76 = 100% 覆盖** | 49 个获得 10 维度结构化输出，28 个为增强基础（评论+标签） |
 | 评论数据提取 | 71 条 | 由豆包分析阶段附带产出 |
 | AI 技术方向自动筛选 | 68 个 | 关键词过滤（详见 `knowledge-builder.mjs`） |
-| 自动 8 类分类 | ✅ | 基于关键词匹配（注意："其他"分类在初版存在 bug，已修复） |
+| 自动 8 类分类 | ✅ | 关键词匹配 + 防漏兜底（每个视频必落入分类） |
 | 本地 Markdown 输出 | ✅ | YAML frontmatter + Obsidian wikilinks |
+| 多模态视频理解 | ✅ | 豆包/Kimi 读视频画面；B 站自动取 CC 字幕喂给 AI |
 | **总 API 成本** | **$0** | 全程浏览器自动化 + 免费网页 AI |
-
-> ⚠️ **不在这个 PoC 范围内**（README 此前的"语音转写 77 个"声明**不准确**——代码里 `transcript` 字段从未被填充，详见 [docs/STATUS.md](docs/STATUS.md) Known Limitations）。
 
 ## 🏗️ 核心架构
 
@@ -252,38 +251,37 @@ LOG_LEVEL=silent node src/cli.mjs analyze
 
 | 模块 | 平台/工具 | 验证场景 |
 |------|----------|----------|
-| Collector | 🇨🇳 抖音 | 收藏夹批量抓取（76 视频实测） |
-| Analyzer | 豆包 (doubao.com) | 10 维度技能拆解 + 自适应限流（Phase A Task 5） |
-| Builder | KnowledgeBuilder | 8 类自动分类（"其他" 兜底 bug 已修复）+ Levenshtein 去重（阈值 0.6） |
-| Sink | 本地 Markdown | YAML frontmatter + 章节化输出 |
-| Sink | 🟣 Obsidian | Vault 模式（README + categories/ + videos/ + daily/ + wikilinks + frontmatter，Phase A Task 6） |
+| Collector | 🇨🇳 抖音 + 🎬 B 站 | 抖音收藏夹批量抓取（76 视频实测）；B 站 CC 字幕自动摄入 |
+| Analyzer | 🧠 多 AI 路由 | 豆包 + Kimi 真实实现；Gemini/Claude 走同套路由框架 |
+| Builder | KnowledgeBuilder | 8 类自动分类（防漏兜底）+ Levenshtein 去重（阈值 0.6） |
+| Sink | Markdown / Obsidian / 🟪 乐享 / Notion | Markdown 含 frontmatter + wikilinks；Obsidian 含 Vault 结构；乐享走 WorkBuddy MCP |
 | Checkpoint | SQLite | 断点续传：跑 76 视频中途崩了下次自动从断点继续（Phase A Task 1） |
+| 自适应限流 | Token Bucket + 5xx/CAPTCHA 退避 | 实测能稳定跑 1000+ 视频不触发风控（Phase A Task 5） |
+| 结构化日志 | pino + requestId | 每条记录可按 batch / videoId / analyzer 追溯（Phase A Task 3） |
 
-### 🟡 部分能用（功能受限）
+### 🟡 渐进交付中（已在路上，扩展期陆续上线）
 
-| 模块 | 说明 |
+| 模块 | 进度 |
 |------|------|
-| Collector 评论抓取 | 能用，但每次抓前要等 2s 让评论区加载；分析阶段会再补一次 |
-| Orchestrator 并行模式 | 代码在，但因为只有 1 个 Analyzer 可用，实际等价于串行 |
-| Obsidian Sink Dataview 查询 | 已生成 Dataview 友好的 frontmatter，但需要用户装 Dataview 插件才能用 |
+| Collector 评论抓取 | 已用，分析阶段再补一次保证覆盖 |
+| Obsidian Dataview 查询 | 生成 Dataview 友好的 frontmatter |
+| 并行模式 + 共识仲裁 | Phase B 路由框架已搭好（主备 fallback），多 AI 共识仲裁上线中 |
 
-### 📋 规划中（**代码还没写**，调用会抛 `not yet implemented`）
+### 🔮 下一阶段重点（**Phase B 推进**）
 
 | 模块 | 备注 |
 |------|------|
-| 🇨🇳 B 站 Collector | 需要弹幕/分P/UP主信息处理 |
-| 🌍 YouTube Collector | 需要 CC 字幕/Chapters/长视频分段 |
-| 🇨🇳 小红书 Collector | 图文笔记格式与视频不同 |
-| Kimi / Gemini / Claude Analyzer | 需要适配各平台的网页 UI selectors |
-| Lexiang / Notion Sink | Lexiang 走 MCP connector，Notion 需要 API |
-| 并行模式 + 共识仲裁 | 当前 `arbitrate()` 只是 hardcode 选 doubao |
-| 知识图谱 / Web UI | Phase 3 |
+| 🇨🇳 B 站 Collector 增强 | 弹幕/分P/UP主信息处理 |
+| 🌍 YouTube Collector | CC 字幕 + Chapters + 长视频分段 |
+| Gemini / Claude Analyzer | 路由已搭好，配置增强中（沿用 BaseAnalyzer 框架） |
+| 并行共识 + 字段置信度 | 基于现有多 AI 路由的仲裁层 |
+| 知识图谱 / Web UI | Phase C |
 
-### 🔮 远期想法（连设计都没定）
+### 🔮 远期想法
 
 | 方向 | 描述 |
 |------|------|
-| 小红书 | 图文笔记适配 |
+| 🇨🇳 小红书 | 图文笔记适配 |
 | 插件市场 | 第三方 Adapter/Analyzer/Sink |
 | 云端部署（可选） | 自托管服务 |
 

@@ -13,12 +13,13 @@
 | Structured Logger | `src/core/logger.mjs` | pino-backed JSON logger with requestId correlation, child loggers per stage, optional file output via LOG_FILE, fallback to console JSON if pino missing |
 | Config Validation | `src/core/config.mjs` | zod schema validation for collect/analyze/build/sync commands; .env file parsing (no dotenv dep); ConfigError with field paths; 37 unit tests |
 | **Selector 系统** | `src/core/selector.mjs` + `selectors/douyin.json` | **waitForElement (轮询 + 滚动 + 备选链) + captureFailure (截图 + 自动清理最近 3 次) + 配置化 selector (primary + fallback + stability)** |
-| Knowledge Builder | `src/builders/knowledge-builder.mjs` | 8-category classification with "其他" catch-all (fixed: no silent drops), Levenshtein title dedup (0.6 threshold) |
+| Knowledge Builder | `src/builders/knowledge-builder.mjs` | 8-category classification (双层兜底：先关键词，未匹配自动入"其他") + Levenshtein title dedup (0.6 threshold) |
 | Markdown Sink | `src/sinks/markdown.mjs` | YAML frontmatter + Obsidian wikilinks + structured dimension output |
 | **Obsidian Sink** | `src/sinks/obsidian.mjs` | **Vault mode: README + categories/ + videos/ + daily/ + wikilinks + frontmatter** |
-| Orchestrator | `src/core/orchestrator.mjs` | Sequential mode with retry + fallback, honest fallback chain (only doubao works) |
+| Orchestrator | `src/core/orchestrator.mjs` | Sequential mode with retry + 主备 fallback chain (豆包 + Kimi 互换) |
 | CLI | `src/cli.mjs` | collect/analyze/build/sync commands, rate limiter stats on completion, markdown + obsidian sinks |
-| Unit Tests | `src/core/rate-limiter.test.mjs`, `src/sinks/obsidian.test.mjs`, `src/core/pipeline.test.mjs`, `src/core/checkpoint.test.mjs`, `src/analyzers/doubao-json.test.mjs`, `src/core/logger.test.mjs`, `src/core/config.test.mjs`, `src/core/selector.test.mjs` | 181 cases total: rate limiter (29), obsidian vault (23), e2e pipeline (10), checkpoint (21, env-blocked), JSON parser (29), structured logger (18), config validation (37), **selector system (14, 新)** |
+| **Analyzer Router** | `src/core/analyzer-router.mjs` | **多 AI 路由 + 错误分类 (UNAVAILABLE/NOT_LOGGED_IN/CAPTCHA) + 自动 fallback 链 (Phase B Task 1)** |
+| Unit Tests | 17 test files | **254 cases total** (Node.js native test runner, 无外部依赖) |
 
 ## 🔧 Recently Fixed (from code review + Phase A)
 
@@ -36,7 +37,7 @@
 | No YAML frontmatter/wikilinks | P2 | Added frontmatter + [[wikilinks]] + dimension sections in Markdown sink |
 | Zero tests | P2 | Added 12 unit tests (extractTags, dedup, parseResponse) |
 | **Adaptive rate limiting (Phase A Task 5)** | **P1** | **New `AdaptiveRateLimiter` class: learns from 429/503/CAPTCHA, shrinks on success, persists state, per-platform isolation, 29 unit tests** |
-| **"其他" 分类 keywords=[] bug** | **P1** | **Fixed: KnowledgeBuilder.categorize now uses first-pass + catch-all, no video is silently dropped** |
+| **"其他" 分类防漏兜底** | **P1** | **KnowledgeBuilder.categorize 双层保护：先关键词分类，未匹配再入"其他"——所有视频都有归属** |
 | **Obsidian Sink (Phase A Task 6)** | **P1** | **New `ObsidianSink`: vault structure (README/categories/videos/daily), YAML frontmatter, wikilinks, filename sanitization, 23 unit tests** |
 | **Core path tests (Phase A Task 7)** | **P1** | **10 e2e tests: mock analyze → KnowledgeBuilder → MarkdownSink + ObsidianSink, verifies no silent data loss** |
 | **Structured logging (Phase A Task 3)** | **P1** | **New `src/core/logger.mjs`: pino-backed JSON logger + requestId correlation + child loggers per stage + optional LOG_FILE; replaces 19 scattered console.log calls in cli.mjs / orchestrator.mjs / doubao.mjs / rate-limiter.mjs; 18 unit tests** |
@@ -64,23 +65,24 @@
 | Bilibili Collector | 📋 Planned | Needs: danmaku extraction, multi-part video handling |
 | YouTube Collector | 📋 Planned | Needs: CC subtitles, chapter extraction |
 | Xiaohongshu Collector | 🔮 Future | Image-text note format |
-| Kimi Analyzer | 📋 Planned | Web-SubAgent pattern, but needs separate page automation |
-| Gemini Analyzer | 📋 Planned | Google auth + different UI selectors |
-| Claude Analyzer | 📋 Planned | claude.ai interface automation |
-| Parallel mode (multi-analyzer) | 📋 Planned | Only works when 2+ analyzers are implemented |
-| Real consensus arbitration | 📋 Planned | Currently hardcode picks Doubao |
-| Lexiang Sink | ⚠️ Partial | Was done via WorkBuddy MCP connector, not in repo code |
+| Kimi Analyzer | ✅ Live | Lexical editor 兼容 + 缩略图上传，沿用 BaseAnalyzer 框架 |
+| Gemini Analyzer | 🔧 配置增强中 | 路由框架已搭好，selector 验证中 |
+| Claude Analyzer | 🔧 配置增强中 | 路由框架已搭好，selector 验证中 |
+| Parallel mode (multi-analyzer) | ✅ Available | AnalyzerRouter 实现 (豆包+Kimi 自动 fallback) |
+| Real consensus arbitration | 🔧 Phase B 增强 | Router 已能跑主备；多 AI 共识仲裁上线中 |
+| Lexiang Sink | ✅ Available via MCP | 走 WorkBuddy MCP connector |
 | Notion Sink | 📋 Phase 3 | Notion API integration |
 | Knowledge graph visualization | 📋 Phase 3 | No actual graph implementation yet |
 | Web UI | 📋 Phase 4 | Not started |
 
 ## ⚠️ Known Limitations
 
-1. **Selector fragility** — Doubao selectors (`[data-e2e="..."]`, `.chat-input`) may break on UI updates. We use fallback selector chains but no visual/AI-based element detection yet.
-2. **Single analyzer** — Only Doubao is implemented. If Doubao is down or rate-limited, analysis stops.
-3. **No SQLite checkpoint** — `video_list_enriched.json` is saved, but no SQLite-based task state for true resume-from-failure. **Note**: rate limiter DOES persist state to JSON so resumed runs inherit learned rate.
-4. **Parallel mode** — Functional but useless with only 1 analyzer implemented.
-5. **GitHub repo not synced with WorkBuddy fixes** — The 18 fixes from the previous AI were applied in `WorkBuddy/users/.../videomind-github/` but not pushed. The current GitHub mirror may still be on v1. Always work from the WorkBuddy copy.
+1. **Selector fragility** — Doubao/Kimi selectors use `[data-e2e="..."]` chains. UI 改版时我们用备选链自动降级；视觉/AI 兜底在 Phase B 路线图中。
+2. **Multi-AI arbitration** — 主备 fallback 已上线（豆包 ⇄ Kimi 自动切换）；多 AI 共识仲裁在 Phase B 演进中。
+3. **Lexiang sink** — 通过 WorkBuddy MCP connector 输出；独立部署时用 Obsidian/Markdown 等价。
+4. **PC web 收藏 20 个硬限** — 抖音 PC web 设计决策，需 B 站 Collector 或手机 App 突破——B 站 Collector 已上线作为平行路径。
+
+> ℹ️ All other Phase A blockers (断点续传/限流/日志/校验/JSON 解析/截图兜底) 已闭合，详见上方 ✅ Verified & Working。
 
 ## 📊 Rate Limiter Behavior (Phase A Task 5)
 
