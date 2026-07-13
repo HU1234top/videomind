@@ -114,6 +114,22 @@ export class MarkdownSink {
       lines.push(`analyzer: "${v.analyzer || 'unknown'}"`);
       lines.push(`skill_name: "${v.dimensions?.skill_name || ''}"`);
       lines.push(`skill_level: "${v.dimensions?.skill_level || ''}"`);
+      // Round 19 / L1 — consensus 元数据 (如有)
+      if (v.consensus && typeof v.consensus === 'object') {
+        lines.push(`consensus_mode: "${v.consensus.mode || ''}"`);
+        if (typeof v.consensus.confidence === 'number') {
+          lines.push(`consensus_confidence: ${v.consensus.confidence.toFixed(2)}`);
+        }
+        if (Array.isArray(v.consensus.analyzers)) {
+          lines.push(`consensus_analyzers: [${v.consensus.analyzers.map(a => `"${a}"`).join(', ')}]`);
+        }
+        if (Array.isArray(v.consensus.failed)) {
+          lines.push(`consensus_failed: [${v.consensus.failed.map(f => `"${f.analyzer}${f.error ? '(' + f.error.slice(0, 30) + ')' : ''}"`).join(', ')}]`);
+        }
+        if (Array.isArray(v.consensus.conflicts)) {
+          lines.push(`consensus_conflicts: ${v.consensus.conflicts.length}`);
+        }
+      }
       lines.push(`tags: [${uniqueTags.map(t => `"${t}"`).join(', ')}]`);
       lines.push('---');
       lines.push('');
