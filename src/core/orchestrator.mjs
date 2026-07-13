@@ -17,7 +17,7 @@ export class Orchestrator {
     this.agent = new WebAgent({ cdpPort: options.cdpPort || 9222, logger: options.logger });
     this.mode = options.mode || 'sequential';  // 'sequential' or 'parallel'
     this.primaryAnalyzer = options.primaryAnalyzer || 'doubao';
-    this.fallbackChain = options.fallbackChain || ['doubao', 'kimi', 'claude'];
+    this.fallbackChain = options.fallbackChain || ['doubao', 'kimi'];
     // Optional checkpoint for resume-on-failure (Phase A Task 1)
     this.checkpoint = options.checkpoint || null;
     this.logger = options.logger || createLogger({ base: { component: 'orchestrator' } });

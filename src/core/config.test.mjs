@@ -301,8 +301,8 @@ test('SUPPORTED_PLATFORMS includes douyin/bilibili/youtube/xiaohongshu', () => {
   assert.deepEqual(SUPPORTED_PLATFORMS, ['douyin', 'bilibili', 'youtube', 'xiaohongshu']);
 });
 
-test('SUPPORTED_ANALYZERS includes doubao/kimi/claude', () => {
-  assert.deepEqual(SUPPORTED_ANALYZERS, ['doubao', 'kimi', 'claude']);
+test('SUPPORTED_ANALYZERS includes doubao/kimi', () => {
+  assert.deepEqual(SUPPORTED_ANALYZERS, ['doubao', 'kimi']);
 });
 
 test('SUPPORTED_SINKS includes markdown/lexiang/obsidian/notion', () => {

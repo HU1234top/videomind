@@ -14,7 +14,6 @@
 import { createLogger } from './logger.mjs';
 import { DoubaoAnalyzer } from '../analyzers/doubao.mjs';
 import { KimiAnalyzer } from '../analyzers/kimi.mjs';
-import { ClaudeAnalyzer } from '../analyzers/claude.mjs';
 
 export class WebAgent {
   constructor(options = {}) {
@@ -65,16 +64,12 @@ export class WebAgent {
  * Analyzer Registry — 真实实现类映射
  *
  * Round 9：从 web-agent.mjs 内部的占位类改为 import 真实 analyzer。
- * 占位 analyzer (gemini 还没实现) 在 analyze() 中抛 AnalyzerUnavailableError，
+ * 占位 analyzer (kimi/gemini/claude) 在 analyze() 中抛 AnalyzerUnavailableError，
  * Router 收到后自动 skip 到下一个。
- *
- * Claude 是真实实现（Round 16）— 仿 Kimi 模式 (ProseMirror contenteditable)，
- * selector based on 公开文档，待 Edge 9222 实证后 verifiedOn 更新。
  */
 const ANALYZER_REGISTRY = {
   doubao: DoubaoAnalyzer,
   kimi: KimiAnalyzer,
-  claude: ClaudeAnalyzer,
 };
 
 export class AnalyzerFactory {

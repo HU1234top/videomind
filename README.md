@@ -20,7 +20,7 @@
 
 ## 🎯 一句话定位
 
-把抖音/B站/YouTube 收藏夹里的视频，**零 API 成本**自动交给Web版多模态 AI（豆包、Kimi、Claude 三大真实接入）分析理解，最终沉淀为可检索、可关联、可复用的结构化知识库。
+把抖音/B站/YouTube 收藏夹里的视频，**零 API 成本**自动交给Web版多模态 AI（豆包、Kimi 真实接入；扩展中）分析理解，最终沉淀为可检索、可关联、可复用的结构化知识库。
 
 ## 🤔 为什么做这个项目
 
@@ -78,7 +78,7 @@ Collector: 抖音/B站/YouTube Adapter
     └────────────┘
          │
          ▼
-Analyzer: 豆包/Kimi/Claude 三 AI Web-SubAgent（主备 fallback 自动切换）
+Analyzer: 豆包/Kimi 双 AI Web-SubAgent（主备 fallback 自动切换）
          │  ┌─ 网页端免费额度，不限流
          │  ├─ 多模态理解：看封面+读评论+分析转写
          │  └─ 10维度技能聚焦分析框架
@@ -103,7 +103,7 @@ Sink: 乐享/Notion/Obsidian/Markdown
 
 1. **不下载视频** — 抖音有防下载保护，很多视频根本下载不了。VideoMind 直接在浏览器里操作，跟人看视频一样，绕过下载限制。
 2. **复用你已登录的浏览器** — Chrome CDP :9222 连接真实浏览器，跳过登录和 Cookie 管理。
-3. **利用网页版免费额度** — 豆包/Kimi/Claude 都有网页端免费使用额度，且**不限流**。Playwright 自动化操作 = 免费调用多模态能力。
+3. **利用网页版免费额度** — 豆包/Kimi 等都有网页端免费使用额度，且**不限流**。Playwright 自动化操作 = 免费调用多模态能力。
 4. **本地 Agent 只做调度** — 规划任务、组装 prompt、合并结果，深度推理全交给免费 Web AI。
 
 > 借鉴了 [AgentChat](https://github.com/) 的 Web-SubAgent 思想，但垂直聚焦于「视频 → 知识库」场景。
@@ -252,7 +252,7 @@ LOG_LEVEL=silent node src/cli.mjs analyze
 | 模块 | 平台/工具 | 验证场景 |
 |------|----------|----------|
 | Collector | 🇨🇳 抖音 + 🎬 B 站 | 抖音收藏夹批量抓取（76 视频实测）；B 站 CC 字幕自动摄入 |
-| Analyzer | 🧠 多 AI 路由 | 豆包 + Kimi + Claude 真实实现；主备 fallback (任一掉线自动切换，未登录自动跳过) |
+| Analyzer | 🧠 双 AI 路由 | 豆包 + Kimi 真实实现；主备 fallback (任一掉线自动切换) |
 | Builder | KnowledgeBuilder | 8 类自动分类（防漏兜底）+ Levenshtein 去重（阈值 0.6） |
 | Sink | Markdown / Obsidian / 🟪 乐享 / Notion | Markdown 含 frontmatter + wikilinks；Obsidian 含 Vault 结构；乐享走 WorkBuddy MCP |
 | Checkpoint | SQLite | 断点续传：跑 76 视频中途崩了下次自动从断点继续（Phase A Task 1） |
@@ -429,7 +429,7 @@ You're already logged into Douyin and Doubao/Kimi/Gemini in your browser. Let th
 
 1. **No video downloads** — Douyin blocks downloads. VideoMind operates inside the browser, just like a human watching the video.
 2. **Reuse your logged-in browser** — Chrome CDP :9222 connects to your real browser session.
-3. **Leverage free web AI tiers** — Doubao / Kimi / Claude offer free web usage with no rate limits. Playwright automates them as callable SubAgents.
+3. **Leverage free web AI tiers** — Doubao / Kimi offer free web usage with no rate limits. Playwright automates them as callable SubAgents.
 4. **Local Agent only orchestrates** — Task planning, prompt assembly, result merging — deep reasoning goes to free Web AI.
 
 ## 🚀 Quick Start
