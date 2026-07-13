@@ -52,3 +52,15 @@ coverage/
 # IDE
 .vscode/
 .idea/
+
+# Round 调试产出（不入 git）
+docs/research/
+logs/
+research/
+patches/
+patches-r*/
+skill_videos.json
+video_list.json
+video_pilot_*.json
+structured_knowledge_base.json
+*.png.snapshot

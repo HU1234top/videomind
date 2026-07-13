@@ -1,0 +1,67 @@
+{
+  "version": "0.9.0",
+  "platform": "claude",
+  "implemented": true,
+  "lastVerified": null,
+  "verifiedOn": null,
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0",
+  "notes": [
+    "Claude.ai Web Chat 实现",
+    "真实域: https://claude.ai/chat (claude.ai 自动跳到 /chat)",
+    "chat input 是 ProseMirror contenteditable div (类似 Lexical 模式), 需 keyboard.type 不能 .fill()",
+    "发送按钮是 button[aria-label='Send message' i] 或回车键",
+    "未登录: claude.ai 会重定向到 /login (NotLoggedInError 由 Router 捕获)",
+    "selector 基于公开文档 + Round 16 框架, 待 Edge 9222 实证后 updated",
+    "待验证后更新 lastVerified/verifiedOn"
+  ],
+  "selectors": {
+    "chatInput": {
+      "primary": "div[contenteditable='true'][aria-label='Write your message to Claude' i]",
+      "fallback": [
+        "div[contenteditable='true'][role='textbox']",
+        "div.ProseMirror[contenteditable='true']",
+        "fieldset div[contenteditable='true']"
+      ],
+      "stability": "medium",
+      "description": "Claude chat 输入框 (ProseMirror contenteditable div)"
+    },
+    "sendButton": {
+      "primary": "button[aria-label='Send message' i]",
+      "fallback": [
+        "button[type='submit'][aria-label*='Send' i]",
+        "fieldset button:has(svg)",
+        "button:has(svg[data-icon='send'])"
+      ],
+      "stability": "medium",
+      "description": "发送按钮 (button + aria-label, 回车键通常也触发)"
+    },
+    "responseContainer": {
+      "primary": "[data-testid='conversation-turn'][data-author='assistant']:last-of-type [data-testid='message-content']",
+      "fallback": [
+        "[data-testid='conversation-turn']:last-of-type",
+        "[data-author='assistant']:last-of-type",
+        "[data-testid='message-content']:last-of-type"
+      ],
+      "stability": "low",
+      "description": "Claude 最后一条 assistant 回复内容容器"
+    },
+    "userLoggedInAvatar": {
+      "primary": "[data-testid='user-menu-button'], button[aria-label*='User menu' i]",
+      "fallback": [
+        "header [data-testid*='avatar']",
+        "img[alt*='avatar' i]:not([alt*='claude' i])"
+      ],
+      "stability": "medium",
+      "description": "已登录用户头像/菜单按钮"
+    },
+    "loginButton": {
+      "primary": "[data-testid='login-button'], button:has-text('Log in')",
+      "fallback": [
+        "input[type='email'][name='email']",
+        "a[href*='/login' i]"
+      ],
+      "stability": "low",
+      "description": "登录按钮 / 邮箱输入 (未登录时必现)"
+    }
+  }
+}
