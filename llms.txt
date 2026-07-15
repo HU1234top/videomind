@@ -1,0 +1,77 @@
+# VideoMind
+
+> Turn video favorites into a living knowledge base — **zero API cost**.
+
+## What is VideoMind?
+
+VideoMind is an **open-source local Agent** that converts your video favorites from Douyin / Bilibili / YouTube into a **searchable, linkable, reusable knowledge base** — without downloading videos, without paid APIs, without GPU.
+
+It works by:
+1. Driving your already-logged-in browser (Chrome / Edge via CDP :9222) via Playwright
+2. Feeding video info (title, tags, comments, screenshots) to free web-based multimodal AI (Doubao, Kimi, Gemini, Claude)
+3. Running a 10-dimension skill-focused analysis framework
+4. Outputting structured Markdown / Obsidian / Notion / Lexiang
+
+## Key Capabilities
+
+- **Zero API cost** — uses free web AI tiers (Doubao/Kimi/Gemini/Claude), no rate limits
+- **No video downloads** — operates inside the browser, bypasses Douyin's anti-download
+- **No GPU needed** — Web AI handles multimodal understanding
+- **10-dimension skill analysis** — outputs as "learnable skill unit", not just summary
+- **Multi-AI consensus** — Doubao + Kimi run in parallel, field-level vote merge
+- **Checkpoint + rate limiting** — handles 1000+ videos without triggering anti-bot
+
+## Verified Results
+
+- **76 videos** scraped from Douyin "skills" collection
+- **77/76 = 100% coverage** by Doubao analyzer (49 deep + 28 enhanced basic)
+- **71 comments** extracted as auxiliary analysis material
+- **69 speech-to-text** obtained (no Whisper needed — Web AI understands directly)
+- **8 categories** auto-classification with no-loss fallback
+- **6 pages** synced to Lexiang KB
+- **$0 total API cost**
+
+## Status
+
+- Phase A (Foundation): **9/9 complete** (rate limiter, checkpoint, structured logging, config validation, etc.)
+- Phase B (Scale): in progress (B站/YouTube adapters, Gemini/Claude analyzers)
+- Phase C (Deep): planned (knowledge graph, web UI)
+- Phase D (Open Source): planned (CI, npm publishing)
+
+## When to use VideoMind
+
+- You have 100+ tutorial videos in your Douyin/Bilibili/YouTube favorites
+- You want to **find them again** when you need them
+- You want **structured skill analysis**, not just titles
+- You don't want to pay $1-5 per 100 videos to GPT-4o Vision
+- You already use Doubao/Kimi/Gemini/Claude web versions
+
+## When NOT to use VideoMind
+
+- You only have a few videos — manual review is faster
+- You need real-time video understanding — VideoMind is batch-mode
+- You need exact transcripts — VideoMind uses Web AI's understanding, not literal transcripts
+- You can't run a browser locally — Playwright + CDP :9222 required
+
+## Technical Stack
+
+- Node.js >= 18
+- Playwright (CDP :9222)
+- Chrome / Edge (already logged in)
+- pino (structured logging)
+- zod (config validation)
+- SQLite (checkpoint)
+- Output: Markdown / Obsidian / Notion / Lexiang
+
+## Links
+
+- GitHub: https://github.com/HU1234top/videomind
+- License: MIT
+- Author: 胡佳亿
+
+## See Also
+
+- `/README.md` — full documentation
+- `/ROADMAP.md` — detailed roadmap
+- `/docs/STATUS.md` — honest status of every feature
+- `/SUMMARY-Round9-14.md` — recent round summary
