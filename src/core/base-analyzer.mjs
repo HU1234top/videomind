@@ -239,6 +239,129 @@ export class BaseAnalyzer {
     };
   }
 
+  // ─── Skill.md rendering (Round 13 / 仓颉.Skill 兼容) ──────
+
+  /**
+   * SeniorDeveloper (Round 13 补实现): 渲染结构化分析结果为「仓颉.Skill 兼容」SKILL.md
+   *
+   * 此前该方法从未实现 (只有 doubao.test.mjs 的测试契约), 导致 GitHub main 红 CI。
+   * 现补实现并挂到基类, Doubao/Kimi 等所有 analyzer 自动继承 (DRY)。
+   *
+   * @param {Object} result - buildResultFromJSON/buildResultFromRegex 产出的结果
+   * @param {string} result.title
+   * @param {Object} result.dimensions
+   * @param {string} [result.url]
+   * @param {Array}  [result.tags]
+   * @param {string} [result.analysis]
+   * @param {string} [result.parseMode]
+   * @param {string} [result.timestamp]
+   * @returns {string} 仓颉.Skill 兼容的 Markdown (frontmatter + RIA++ 六段)
+   * @throws {Error} 输入无效时抛 'invalid input'
+   */
+  renderAsSkillMd(result) {
+    if (!result || typeof result !== 'object' || !result.dimensions || !result.title) {
+      throw new Error('invalid input: renderAsSkillMd requires { title, dimensions }');
+    }
+
+    const d = result.dimensions;
+    const name = this._skillSlug(result.title);
+
+    const list = (arr) =>
+      (Array.isArray(arr) && arr.length > 0)
+        ? arr.map(x => `- ${this._escapeMd(x)}`).join('\n')
+        : '_（无）_';
+
+    const tags = Array.isArray(result.tags) ? result.tags : [];
+    const autoTags = Array.isArray(d.auto_tags) ? d.auto_tags : [];
+    const allTags = [...tags, ...autoTags];
+
+    const frontmatter = [
+      '---',
+      `name: ${name}`,
+      'description: |',
+      `  ${this._escapeMd(d.use_cases || result.analysis || result.title)}`,
+      `source_video: ${this._escapeMd(result.title)}`,
+      `source_url: ${this._escapeMd(result.url || '')}`,
+      `tags: [${allTags.join(', ')}]`,
+      'related_skills: []',
+      `created_at: ${result.timestamp || new Date().toISOString()}`,
+      `parse_mode: ${result.parseMode || 'json'}`,
+      '---',
+    ].join('\n');
+
+    const body = [
+      `# ${result.title}`,
+      '',
+      '## R — 原文引用',
+      '',
+      this._escapeMd(result.analysis || '（无原文）'),
+      '',
+      '## I — 方法论骨架',
+      '',
+      `**技能名称**: ${this._escapeMd(d.skill_name || result.title)}`,
+      `**技能等级**: ${d.skill_level ? this._escapeMd(d.skill_level) : '_（无）_'}`,
+      '',
+      '**核心要点**:',
+      list(d.key_points),
+      '',
+      '## A1 — 视频中的应用',
+      '',
+      '**工具与资源**:',
+      list(d.tools_resources),
+      '',
+      '## A2 — 触发场景',
+      '',
+      `**语言信号**: 想要${this._escapeMd(d.use_cases || '掌握该技能')}怎么做？适合需要系统学习的人。`,
+      '',
+      `**适用场景**: ${d.use_cases ? this._escapeMd(d.use_cases) : '_（无）_'}`,
+      '',
+      '## E — 可执行步骤',
+      '',
+      list(d.action_steps),
+      '',
+      '## B — 边界',
+      '',
+      `**前提**: ${d.prerequisites ? this._escapeMd(d.prerequisites) : '_（无）_'}`,
+      '',
+      '**常见陷阱**:',
+      list(d.pitfalls),
+      '',
+      `**自动标签**: ${autoTags.length > 0 ? autoTags.map(t => '#' + this._escapeMd(t)).join(' ') : '_（无）_'}`,
+      '',
+    ].join('\n');
+
+    return `${frontmatter}\n${body}`;
+  }
+
+  /** 生成仓颉.Skill 兼容的 name slug (kebab-case, 中文保留, 管线字符剥离) */
+  _skillSlug(title) {
+    if (!title) return 'skill';
+    const cleaned = String(title)
+      .toLowerCase()
+      .replace(/\|/g, ' ')                       // 剥离管线字符 (Round 13 要求)
+      .replace(/[^a-z0-9一-鿿]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .replace(/-{2,}/g, '-');
+    if (cleaned && /[a-z0-9]/.test(cleaned)) return cleaned;
+    // 纯中文 / 无 ascii: 用 hash 兜底, 保证 name 合法
+    return 'skill-' + this._hashStr(title);
+  }
+
+  _hashStr(str) {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) {
+      h = (h << 5) - h + str.charCodeAt(i);
+      h |= 0;
+    }
+    return Math.abs(h).toString(36);
+  }
+
+  /** 转义 Markdown/YAML 中的管线字符, 避免破坏表格与块标量 */
+  _escapeMd(s) {
+    if (s == null) return '';
+    return String(s).replace(/\|/g, '\\|');
+  }
+
   // ─── Value helpers ─────────────────────────────────────────
 
   stringOrNull(v) {
