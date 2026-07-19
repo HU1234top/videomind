@@ -157,4 +157,19 @@ describe('MarkdownSink — basic functionality (regression)', () => {
       assert.match(content, /skill_name:\s*"Claude 10倍速"/);
     } finally { cleanup(); }
   });
+
+  test('author/url 缺省时优雅兜底 (不出现 undefined)', async () => {
+    const { dir, cleanup } = setupDir();
+    try {
+      const sink = new MarkdownSink({ outputDir: dir });
+      // 覆盖默认 author/url 为 undefined，复现真实缺省场景
+      const kb = makeKb([{ author: undefined, url: undefined }]);
+      await sink.sink(kb);
+      const content = readFileSync(join(dir, 'AI Agent.md'), 'utf8');
+      // SeniorDeveloper fix: 缺省应兜底为「未知」/「（无）」，而非 undefined
+      assert.match(content, /- 作者: 未知/);
+      assert.match(content, /- 链接: （无）/);
+      assert.doesNotMatch(content, /undefined/);
+    } finally { cleanup(); }
+  });
 });

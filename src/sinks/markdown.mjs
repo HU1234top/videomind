@@ -148,8 +148,8 @@ export class MarkdownSink {
         lines.push('');
       }
 
-      lines.push(`- 作者: ${v.author}`);
-      lines.push(`- 链接: ${v.url}`);
+      lines.push(`- 作者: ${v.author || '未知'}`);
+      lines.push(`- 链接: ${v.url || '（无）'}`);
       lines.push(`- 技能: ${v.dimensions?.skill_name || '(待提取)'}`);
       lines.push(`- 等级: ${v.dimensions?.skill_level || '(待提取)'}`);
       lines.push('');
