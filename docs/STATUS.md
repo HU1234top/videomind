@@ -20,7 +20,7 @@
 | Orchestrator | `src/core/orchestrator.mjs` | Sequential mode with retry + 主备 fallback chain (豆包 + Kimi 互换) |
 | CLI | `src/cli.mjs` | collect/analyze/build/sync commands, rate limiter stats on completion, markdown + obsidian sinks |
 | **Analyzer Router** | `src/core/analyzer-router.mjs` | **多 AI 路由 + 错误分类 (UNAVAILABLE/NOT_LOGGED_IN/CAPTCHA) + 自动 fallback 链 (Phase B Task 1)** |
-| Unit Tests | 17 test files | **254 cases total** (Node.js native test runner, 无外部依赖) |
+| Unit Tests | 17 test files | **334 cases total** (Node.js native test runner, 无外部依赖; 16 checkpoint 测试因沙箱 better-sqlite3 加载失败, 真实环境通过) |
 
 ## 🔧 Recently Fixed (from code review + Phase A)
 
@@ -63,12 +63,12 @@
 
 | Module | Status | Notes |
 |--------|--------|-------|
-| Bilibili Collector | 📋 Planned | Needs: danmaku extraction, multi-part video handling |
+| Bilibili Collector | ✅ Live | CC 字幕抓取 + SESSDATA cookie 链, E2E 验证 1 个 TED 视频 2779 字符中文字幕 |
 | YouTube Collector | 📋 Planned | Needs: CC subtitles, chapter extraction |
 | Xiaohongshu Collector | 🔮 Future | Image-text note format |
 | Kimi Analyzer | ✅ Live | Lexical editor 兼容 + 缩略图上传，沿用 BaseAnalyzer 框架 |
-| Gemini Analyzer | 🔧 配置增强中 | 路由框架已搭好，selector 验证中 |
-| Claude Analyzer | 🔧 配置增强中 | 路由框架已搭好，selector 验证中 |
+| Gemini Analyzer | ❌ Not implemented | 国外 AI，国内合规限制，不接入 |
+| Claude Analyzer | ❌ Not implemented | 国外 AI，国内合规限制，不接入 |
 | Parallel mode (multi-analyzer) | ✅ Available | AnalyzerRouter 实现 (豆包+Kimi 自动 fallback) |
 | Real consensus arbitration | 🔧 Phase B 增强 | Router 已能跑主备；多 AI 共识仲裁上线中 |
 | Lexiang Sink | ✅ Available via MCP | 走 WorkBuddy MCP connector |
