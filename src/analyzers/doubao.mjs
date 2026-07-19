@@ -14,6 +14,7 @@
 import { BaseAnalyzer } from '../core/base-analyzer.mjs';
 import { waitForBodyTextStable, waitForElementTextStable } from '../core/dom-watcher.mjs';
 import { NotLoggedInError } from '../core/analyzer-errors.mjs';
+import { uploadThumbToEditor } from '../core/thumb-upload.mjs';
 
 export class DoubaoAnalyzer extends BaseAnalyzer {
   constructor(context, options = {}) {
@@ -46,6 +47,14 @@ export class DoubaoAnalyzer extends BaseAnalyzer {
         log?.error?.({ attempts: inputResult.attempts }, 'chat input not found');
         await captureFailure(page, 'no-chat-input', { logger: log });
         throw new Error('chat input not found — selectors/doubao.json may be outdated');
+      }
+
+      // Round 22 / Round 11 复活: 上传缩略图 (抖音 URL 被反爬虫, 缩略图是 AI 唯一能 '看' 的)
+      if (video.thumb || video.cover_url) {
+        await uploadThumbToEditor(page, inputResult.element, video, {
+          editorSelector: 'textarea.semi-input-textarea, div[contenteditable="true"]',
+          logger: log
+        });
       }
 
       // 构造 prompt + 输入
@@ -143,6 +152,8 @@ export class DoubaoAnalyzer extends BaseAnalyzer {
     const topComments = video.comments?.slice(0, 5).map(c =>
       typeof c === 'string' ? c : `${c.author}: ${c.text}`
     ).join('\n') || '无';
+    // Round 22 / Round 11 复活: 提示 AI 已经收到封面图 + 评论
+    const hasThumb = video.thumb || video.cover_url;
 
     return `你是一位技能拆解专家。请将以下视频当作一个「可学习的技能单元」来深度分析。
 
@@ -153,6 +164,7 @@ export class DoubaoAnalyzer extends BaseAnalyzer {
 - 精选评论：
 ${topComments}
 - 语音转写：${video.transcript || '无'}
+${hasThumb ? '- 已附上视频封面图 (抖音 CDN, 第一帧 + 文字信息), 结合图片和评论一起分析\n  注意: 因抖音 URL 反爬虫, 你可能无法 fetch 完整视频, 请基于封面图视觉信息 + 评论 + tags 综合推断' : '- 视频本体不可访问 (无封面图), 请仅基于标题/作者/标签/评论推断'}
 
 ## 分析要求（10维度技能框架）
 

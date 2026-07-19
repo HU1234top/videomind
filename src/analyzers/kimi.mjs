@@ -14,6 +14,7 @@
  */
 
 import { BaseAnalyzer } from '../core/base-analyzer.mjs';
+import { uploadThumbToEditor } from '../core/thumb-upload.mjs';
 
 export class KimiAnalyzer extends BaseAnalyzer {
   constructor(context, options = {}) {
@@ -37,6 +38,14 @@ export class KimiAnalyzer extends BaseAnalyzer {
       // 等输入框出现
       const chatInput = page.locator(this.selectors.chatInput.primary);
       await chatInput.waitFor({ state: 'visible', timeout: 15000 });
+
+      // Round 22 / Round 11 复活: 上传缩略图 (抖音 URL 被反爬虫, 缩略图是 AI 唯一能 '看' 的)
+      if (video.thumb || video.cover_url) {
+        await uploadThumbToEditor(page, chatInput, video, {
+          editorSelector: 'div.chat-input-editor[contenteditable="true"]',
+          logger: log
+        });
+      }
 
       const prompt = this.buildPrompt(video);
       await this._fillContentEditable(page, chatInput, prompt);
