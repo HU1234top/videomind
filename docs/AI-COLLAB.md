@@ -94,12 +94,12 @@ export class XxxAnalyzer extends BaseAnalyzer {
 
 ---
 
-## 5. 开关模式（AnalyzerRouter）现状
+## 5. 开关模式（AnalyzerRouter）现状（Round 22 同步）
 
-- ✅ `sequential`：primary + fallback chain，错误分类驱动 skip/fallback/abort，checkpoint 短路。
-- ⚠️ `parallel`：**半残**——`analyzeParallel` 绕过 Router 直接 `sendToAI`，`arbitrate()` 硬编码选豆包。
-  仅当 2+ 真实 analyzer 实现后才有意义（当前 gemini/claude 仍是 stub）。
-- ⚠️ fallback chain 写死在 `orchestrator.mjs`（`['doubao','kimi','gemini','claude']`），CLI 还不能配置顺序。
+- ✅ `sequential`：主备 fallback 已上线（豆包 ⇄ Kimi 自动切换），错误分类驱动 skip/fallback/abort，checkpoint 短路。
+- ✅ 并行共识仲裁（Round 18 起）：`--mode consensus` 接入 `routeConsensus`，豆包 + Kimi 同跑字段级投票；多 AI 共识仲裁仍在 Phase B 演进中。
+- ⚠️ fallback chain 仍写死在 `orchestrator.mjs`（`['doubao','kimi','gemini','claude']`），CLI 还不能配置顺序（待增强）。
+- ⚠️ Gemini / Claude analyzer 在 Round 16 实现后又回退/转为"配置增强中"，当前非稳定可用；新增 analyzer 仍走 §4 标准姿势。
 
 ---
 
