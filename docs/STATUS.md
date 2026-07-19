@@ -8,7 +8,8 @@
 | Module | File | What works |
 |--------|------|------------|
 | Douyin Collector | `src/collectors/douyin.mjs` | Favorites collection scraping, tag extraction, comment fetching (with adaptive rate limiter) |
-| Doubao Analyzer | `src/analyzers/doubao.mjs` | Full 10-dimension parsing, retry + CAPTCHA detection, dynamic generation wait, adaptive rate limiting |
+| Doubao Analyzer | `src/analyzers/doubao.mjs` | Full 10-dimension parsing, retry + CAPTCHA detection, dynamic generation wait, adaptive rate limiting, NOT_LOGGED_IN 检测 |
+| Kimi Analyzer | `src/analyzers/kimi.mjs` | Phase B 真实实现：contenteditable 填充 + 登录弹窗关闭 + div 发送按钮；复用 BaseAnalyzer 解析/retry |
 | Adaptive Rate Limiter | `src/core/rate-limiter.mjs` | Per-platform adaptive throttling: shrinks on sustained success, back-offs on 429/503/CAPTCHA, persists across runs |
 | Structured Logger | `src/core/logger.mjs` | pino-backed JSON logger with requestId correlation, child loggers per stage, optional file output via LOG_FILE, fallback to console JSON if pino missing |
 | Config Validation | `src/core/config.mjs` | zod schema validation for collect/analyze/build/sync commands; .env file parsing (no dotenv dep); ConfigError with field paths; 37 unit tests |

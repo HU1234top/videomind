@@ -14,6 +14,7 @@
  */
 
 import { BaseAnalyzer } from '../core/base-analyzer.mjs';
+import { captureFailure } from '../core/selector.mjs';
 import { uploadThumbToEditor } from '../core/thumb-upload.mjs';
 
 export class KimiAnalyzer extends BaseAnalyzer {

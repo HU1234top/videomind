@@ -13,6 +13,7 @@
 
 import { BaseAnalyzer } from '../core/base-analyzer.mjs';
 import { waitForBodyTextStable, waitForElementTextStable } from '../core/dom-watcher.mjs';
+import { waitForElement, captureFailure } from '../core/selector.mjs';
 import { NotLoggedInError } from '../core/analyzer-errors.mjs';
 import { uploadThumbToEditor } from '../core/thumb-upload.mjs';
 
